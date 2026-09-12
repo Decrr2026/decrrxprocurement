@@ -1,4 +1,4 @@
-<title>DECRR Procurement</title>
+<title>DECRR Interio</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -10,7 +10,10 @@
   --success:#188A5C; --success-weak:#E3F5EC; --warning:#B4740E; --warning-weak:#FCF0DA;
   --danger:#D93A46; --danger-weak:#FCE7E8;
   --shadow:0 1px 2px rgba(20,24,48,.05),0 8px 24px rgba(20,24,48,.06);
-  --radius:10px;
+  --shadow-lg:0 2px 4px rgba(20,24,48,.04),0 16px 40px rgba(20,24,48,.09);
+  --shadow-hover:0 4px 10px rgba(20,24,48,.06),0 20px 44px rgba(47,111,237,.14);
+  --radius:12px; --radius-lg:16px;
+  --ease:cubic-bezier(.2,.7,.3,1);
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
@@ -21,6 +24,8 @@
     --success:#3BC38A; --success-weak:rgba(59,195,138,.14); --warning:#E3A83B; --warning-weak:rgba(227,168,59,.14);
     --danger:#F0596B; --danger-weak:rgba(240,89,107,.14);
     --shadow:0 1px 2px rgba(0,0,0,.35),0 8px 24px rgba(0,0,0,.4);
+    --shadow-lg:0 2px 6px rgba(0,0,0,.4),0 20px 50px rgba(0,0,0,.5);
+    --shadow-hover:0 4px 12px rgba(0,0,0,.4),0 20px 50px rgba(91,141,239,.22);
   }
 }
 :root[data-theme="dark"]{
@@ -31,6 +36,8 @@
   --success:#3BC38A; --success-weak:rgba(59,195,138,.14); --warning:#E3A83B; --warning-weak:rgba(227,168,59,.14);
   --danger:#F0596B; --danger-weak:rgba(240,89,107,.14);
   --shadow:0 1px 2px rgba(0,0,0,.35),0 8px 24px rgba(0,0,0,.4);
+  --shadow-lg:0 2px 6px rgba(0,0,0,.4),0 20px 50px rgba(0,0,0,.5);
+  --shadow-hover:0 4px 12px rgba(0,0,0,.4),0 20px 50px rgba(91,141,239,.22);
 }
 *{box-sizing:border-box;}
 html,body{margin:0;padding:0;}
@@ -43,36 +50,54 @@ h1,h2,h3,h4{font-family:"Manrope",sans-serif; font-weight:700; margin:0; text-wr
 .num{font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums;}
 a{color:var(--accent);}
 button{font-family:inherit; cursor:pointer;}
-input,select,textarea{font-family:inherit; font-size:14px; color:var(--text); background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:8px 10px;}
-input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid var(--accent); outline-offset:1px;}
+input,select,textarea{font-family:inherit; font-size:14px; color:var(--text); background:var(--surface); border:1px solid var(--border); border-radius:9px; padding:8px 10px; transition:border-color .15s var(--ease), box-shadow .15s var(--ease);}
+input:hover,select:hover,textarea:hover{border-color:var(--text-faint);}
+input:focus,select:focus,textarea:focus{outline:none; border-color:var(--accent); box-shadow:0 0 0 3.5px var(--accent-weak);}
+button:focus-visible,.navlink:focus-visible,a:focus-visible{outline:2px solid var(--accent); outline-offset:2px; border-radius:6px;}
 ::placeholder{color:var(--text-faint);}
 @media (prefers-reduced-motion: reduce){ *{animation-duration:.001ms !important; transition-duration:.001ms !important;} }
+
+/* ---- custom scrollbars ---- */
+::-webkit-scrollbar{width:10px; height:10px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--border); border-radius:99px; border:2px solid var(--bg); background-clip:padding-box;}
+::-webkit-scrollbar-thumb:hover{background:var(--text-faint); background-clip:padding-box;}
+#sidebar::-webkit-scrollbar-thumb{background:rgba(255,255,255,.14); border-color:var(--sidebar-bg);}
+#sidebar::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.24);}
+
+/* ---- page transition ---- */
+#content{animation:contentIn .32s var(--ease);}
+@keyframes contentIn{from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:none;}}
 
 /* ---- shell ---- */
 #shell{display:flex; min-height:100vh;}
 #sidebar{
-  width:236px; flex:none; background:var(--sidebar-bg); color:var(--sidebar-text);
-  display:flex; flex-direction:column; position:sticky; top:0; height:100vh; overflow-y:auto;
-  transition:transform .2s ease; z-index:40;
+  width:236px; flex:none; background:linear-gradient(180deg,var(--sidebar-bg) 0%,var(--sidebar-bg-2) 220%); color:var(--sidebar-text);
+  display:flex; flex-direction:column; position:sticky; top:0; height:100vh; overflow-y:auto; overflow-x:hidden;
+  transition:transform .25s var(--ease); z-index:40; box-shadow:1px 0 0 rgba(255,255,255,.04);
 }
 .brand{display:flex; align-items:center; gap:11px; padding:20px 18px 16px; border-bottom:1px solid rgba(255,255,255,.07);}
 .brand-mark{width:34px;height:34px;border-radius:9px;background:linear-gradient(155deg,var(--accent),#7C4DFF);display:flex;align-items:center;justify-content:center;color:#fff;font-family:"Manrope";font-weight:800;font-size:15px;flex:none;}
-.brand-mark-logo{width:42px;height:42px;border-radius:10px;background:#fff;padding:5px;box-shadow:0 2px 8px rgba(0,0,0,.25);}
+.brand-mark-logo{width:42px;height:42px;border-radius:10px;background:#fff;padding:5px;box-shadow:0 3px 10px rgba(0,0,0,.3),0 0 0 1px rgba(255,255,255,.06);}
 .brand-mark-logo img{width:100%;height:100%;object-fit:contain;display:block;}
 .brand-text{line-height:1.25;}
 .brand-text b{display:block; color:#fff; font-family:"Manrope"; font-size:14.5px; letter-spacing:.2px;}
 .brand-text span{display:block; color:var(--sidebar-text); font-size:9.5px; letter-spacing:.05em; text-transform:uppercase; margin-top:2px;}
-nav.navlist{padding:10px; display:flex; flex-direction:column; gap:2px; flex:1;}
-.navlink{display:flex; align-items:center; gap:11px; padding:9px 12px; border-radius:8px; color:var(--sidebar-text); text-decoration:none; font-size:13.5px; font-weight:500; border:none; background:transparent; width:100%; text-align:left;}
-.navlink:hover{background:var(--sidebar-bg-2); color:#fff;}
-.navlink.active{background:var(--accent); color:#fff;}
-.navlink .ic{width:17px; text-align:center; flex:none; font-size:14px;}
+nav.navlist{padding:12px 10px; display:flex; flex-direction:column; gap:2px; flex:1;}
+.navlink{position:relative; display:flex; align-items:center; gap:11px; padding:9px 12px; border-radius:8px; color:var(--sidebar-text); text-decoration:none; font-size:13.5px; font-weight:500; border:none; background:transparent; width:100%; text-align:left; transition:background .15s var(--ease), color .15s var(--ease), padding-left .15s var(--ease);}
+.navlink:hover{background:rgba(255,255,255,.06); color:#fff; padding-left:15px;}
+.navlink.active{background:linear-gradient(90deg,rgba(91,141,239,.22),rgba(91,141,239,.08)); color:#fff; box-shadow:inset 0 0 0 1px rgba(91,141,239,.28);}
+.navlink.active::before{content:""; position:absolute; left:-10px; top:50%; transform:translateY(-50%); width:3px; height:20px; border-radius:0 3px 3px 0; background:var(--accent); box-shadow:0 0 10px var(--accent);}
+.navlink .ic{width:17px; text-align:center; flex:none; font-size:14px; transition:transform .15s var(--ease);}
+.navlink:hover .ic{transform:scale(1.08);}
 .sidebar-foot{padding:14px 18px; font-size:11px; color:var(--text-faint); border-top:1px solid rgba(255,255,255,.07);}
 #sidebar-scrim{display:none;}
 
 #main-col{flex:1; min-width:0; display:flex; flex-direction:column;}
 #topbar{
-  position:sticky; top:0; z-index:30; background:var(--surface); border-bottom:1px solid var(--border);
+  position:sticky; top:0; z-index:30; background:var(--surface); background:color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--border);
   display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 22px;
 }
 .topbar-left{display:flex; align-items:center; gap:12px; min-width:0;}
@@ -83,7 +108,7 @@ nav.navlist{padding:10px; display:flex; flex-direction:column; gap:2px; flex:1;}
 .topbar-right{display:flex; align-items:center; gap:14px; flex:none;}
 .clock{font-size:12px; color:var(--text-muted); text-align:right; white-space:nowrap;}
 .user-chip{display:flex; align-items:center; gap:9px;}
-.avatar{width:32px;height:32px;border-radius:50%;background:var(--accent-weak); color:var(--accent-text); display:flex; align-items:center; justify-content:center; font-family:"Manrope"; font-weight:700; font-size:13px; flex:none;}
+.avatar{width:32px;height:32px;border-radius:50%;background:linear-gradient(155deg,var(--accent),#7C4DFF); color:#fff; display:flex; align-items:center; justify-content:center; font-family:"Manrope"; font-weight:700; font-size:12.5px; flex:none; box-shadow:0 3px 10px rgba(47,111,237,.35);}
 .user-chip .who{line-height:1.2;}
 .user-chip .who b{display:block; font-size:12.5px;}
 .user-chip .who span{display:block; font-size:11px; color:var(--text-muted);}
@@ -92,7 +117,7 @@ nav.navlist{padding:10px; display:flex; flex-direction:column; gap:2px; flex:1;}
 #content{padding:20px 22px 48px; max-width:1360px; width:100%; margin:0 auto;}
 
 /* ---- generic bits ---- */
-.card{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow);}
+.card{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow); transition:box-shadow .2s var(--ease), transform .2s var(--ease);}
 .card-pad{padding:18px 20px;}
 .section-head{display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-bottom:14px; flex-wrap:wrap;}
 .section-head h2{font-size:15.5px;}
@@ -101,25 +126,30 @@ nav.navlist{padding:10px; display:flex; flex-direction:column; gap:2px; flex:1;}
 .kpi-row{grid-template-columns:repeat(4,1fr);}
 @media (max-width:900px){.kpi-row{grid-template-columns:repeat(2,1fr);}}
 @media (max-width:520px){.kpi-row{grid-template-columns:1fr;}}
-.kpi{display:flex; align-items:center; gap:13px; padding:16px 18px;}
-.kpi .ic{width:42px;height:42px;border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:18px; flex:none;}
-.kpi .ic.blue{background:var(--accent-weak); color:var(--accent-text);}
+.kpi{display:flex; align-items:center; gap:13px; padding:16px 18px; position:relative; overflow:hidden;}
+.kpi:hover{box-shadow:var(--shadow-hover); transform:translateY(-2px);}
+.kpi .ic{width:42px;height:42px;border-radius:11px; display:flex; align-items:center; justify-content:center; font-size:18px; flex:none; transition:transform .2s var(--ease);}
+.kpi:hover .ic{transform:scale(1.08) rotate(-4deg);}
+.kpi .ic.blue{background:linear-gradient(155deg,var(--accent-weak),var(--accent-weak)); color:var(--accent-text);}
 .kpi .ic.green{background:var(--success-weak); color:var(--success);}
 .kpi .ic.amber{background:var(--warning-weak); color:var(--warning);}
 .kpi .ic.red{background:var(--danger-weak); color:var(--danger);}
 .kpi .figure{font-family:"Manrope"; font-weight:800; font-size:22px; line-height:1.1;}
 .kpi .label{color:var(--text-muted); font-size:12px; margin-top:3px;}
 
-.btn{display:inline-flex; align-items:center; gap:7px; border-radius:8px; padding:9px 15px; font-size:13.5px; font-weight:600; border:1px solid transparent; white-space:nowrap;}
-.btn-primary{background:var(--accent); color:#fff;}
-.btn-primary:hover{background:var(--accent-hover);}
+.btn{display:inline-flex; align-items:center; gap:7px; border-radius:9px; padding:9px 15px; font-size:13.5px; font-weight:600; border:1px solid transparent; white-space:nowrap; transition:background .15s var(--ease), border-color .15s var(--ease), transform .1s var(--ease), box-shadow .15s var(--ease); position:relative;}
+.btn:active:not(:disabled){transform:scale(.97);}
+.btn-primary{background:var(--accent); color:#fff; box-shadow:0 1px 2px rgba(20,24,48,.08),0 6px 16px rgba(47,111,237,.28);}
+.btn-primary:hover{background:var(--accent-hover); box-shadow:0 2px 4px rgba(20,24,48,.1),0 10px 24px rgba(47,111,237,.36); transform:translateY(-1px);}
 .btn-ghost{background:var(--surface); border-color:var(--border); color:var(--text);}
-.btn-ghost:hover{background:var(--surface-2);}
-.btn-danger{background:var(--danger); color:#fff;}
+.btn-ghost:hover{background:var(--surface-2); border-color:var(--text-faint);}
+.btn-danger{background:var(--danger); color:#fff; box-shadow:0 6px 16px rgba(217,58,70,.26);}
+.btn-danger:hover{transform:translateY(-1px); box-shadow:0 10px 22px rgba(217,58,70,.34);}
 .btn-sm{padding:6px 11px; font-size:12.5px;}
-.btn:disabled{opacity:.5; cursor:not-allowed;}
-.iconbtn{width:30px;height:30px;border-radius:7px;border:1px solid var(--border);background:var(--surface);color:var(--text-muted);display:inline-flex;align-items:center;justify-content:center;font-size:13px;}
-.iconbtn:hover{background:var(--surface-2); color:var(--text);}
+.btn:disabled{opacity:.5; cursor:not-allowed; transform:none !important; box-shadow:none !important;}
+.iconbtn{width:30px;height:30px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text-muted);display:inline-flex;align-items:center;justify-content:center;font-size:13px; transition:background .15s var(--ease), color .15s var(--ease), border-color .15s var(--ease), transform .12s var(--ease);}
+.iconbtn:hover{background:var(--surface-2); color:var(--text); transform:translateY(-1px);}
+.iconbtn:active{transform:translateY(0) scale(.94);}
 .iconbtn.danger:hover{background:var(--danger-weak); color:var(--danger); border-color:var(--danger-weak);}
 .iconbtn.accent:hover{background:var(--accent-weak); color:var(--accent-text); border-color:var(--accent-weak);}
 
@@ -132,38 +162,42 @@ nav.navlist{padding:10px; display:flex; flex-direction:column; gap:2px; flex:1;}
 @media (max-width:560px){.form-grid{grid-template-columns:1fr;}}
 
 table{width:100%; border-collapse:collapse; font-size:13px;}
-thead th{text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--text-muted); font-weight:600; padding:9px 12px; background:var(--surface-2); white-space:nowrap;}
-thead th:first-child{border-top-left-radius:8px;} thead th:last-child{border-top-right-radius:8px;}
+thead th{text-align:left; font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); font-weight:700; padding:10px 12px; background:var(--surface-2); white-space:nowrap; border-bottom:1px solid var(--border);}
+thead th:first-child{border-top-left-radius:9px;} thead th:last-child{border-top-right-radius:9px;}
 tbody td{padding:11px 12px; border-bottom:1px solid var(--border); vertical-align:middle;}
 tbody tr:last-child td{border-bottom:none;}
+tbody tr{transition:background .12s var(--ease);}
 tbody tr:hover{background:var(--surface-2);}
-.table-wrap{overflow-x:auto; border:1px solid var(--border); border-radius:10px;}
+.table-wrap{overflow-x:auto; border:1px solid var(--border); border-radius:11px; box-shadow:var(--shadow);}
 .table-wrap table{border:none; border-radius:0;}
 .cell-muted{color:var(--text-muted); font-size:12.5px;}
 .right{text-align:right;} .center{text-align:center;}
 
-.badge{display:inline-flex; align-items:center; gap:5px; padding:3px 9px; border-radius:99px; font-size:11.5px; font-weight:600; white-space:nowrap;}
+.badge{display:inline-flex; align-items:center; gap:5px; padding:3.5px 10px; border-radius:99px; font-size:11.5px; font-weight:700; white-space:nowrap; letter-spacing:.01em;}
 .badge.green{background:var(--success-weak); color:var(--success);}
 .badge.amber{background:var(--warning-weak); color:var(--warning);}
 .badge.red{background:var(--danger-weak); color:var(--danger);}
 .badge.blue{background:var(--accent-weak); color:var(--accent-text);}
 .badge.grey{background:var(--surface-2); color:var(--text-muted);}
-.dot{width:8px;height:8px;border-radius:50%;display:inline-block; flex:none;}
-.dot.green{background:var(--success);} .dot.amber{background:var(--warning);} .dot.red{background:var(--danger);}
+.dot{width:7px;height:7px;border-radius:50%;display:inline-block; flex:none;}
+.dot.green{background:var(--success); box-shadow:0 0 6px var(--success);} .dot.amber{background:var(--warning); box-shadow:0 0 6px var(--warning);} .dot.red{background:var(--danger); box-shadow:0 0 6px var(--danger);}
 
 .toolbar{display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
 .search-box{position:relative; flex:1; min-width:180px;}
 .search-box input{width:100%; padding-left:30px;}
 .search-box .ic{position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--text-faint); font-size:12px;}
-.pill-tabs{display:flex; gap:6px; background:var(--surface-2); padding:4px; border-radius:9px; width:max-content;}
-.pill-tab{border:none; background:transparent; padding:7px 14px; border-radius:7px; font-size:12.5px; font-weight:600; color:var(--text-muted);}
+.pill-tabs{display:flex; gap:6px; background:var(--surface-2); padding:4px; border-radius:10px; width:max-content;}
+.pill-tab{border:none; background:transparent; padding:7px 14px; border-radius:7px; font-size:12.5px; font-weight:600; color:var(--text-muted); transition:background .15s var(--ease), color .15s var(--ease);}
+.pill-tab:hover{color:var(--text);}
 .pill-tab.active{background:var(--surface); color:var(--text); box-shadow:var(--shadow);}
 
 .empty{padding:36px 20px; text-align:center; color:var(--text-muted);}
 .empty .big{font-size:26px; margin-bottom:8px;}
 
-.modal-backdrop{position:fixed; inset:0; background:rgba(10,13,25,.5); display:flex; align-items:flex-start; justify-content:center; padding:5vh 16px; overflow-y:auto; z-index:100;}
-.modal{background:var(--surface); border-radius:12px; width:100%; max-width:560px; box-shadow:0 20px 60px rgba(0,0,0,.3); border:1px solid var(--border);}
+.modal-backdrop{position:fixed; inset:0; background:rgba(10,13,25,.55); backdrop-filter:blur(2px); display:flex; align-items:flex-start; justify-content:center; padding:5vh 16px; overflow-y:auto; z-index:100; animation:backdropIn .18s var(--ease);}
+@keyframes backdropIn{from{opacity:0;} to{opacity:1;}}
+.modal{background:var(--surface); border-radius:var(--radius-lg); width:100%; max-width:560px; box-shadow:0 24px 70px rgba(0,0,0,.32),0 0 0 1px rgba(0,0,0,.02); border:1px solid var(--border); animation:modalIn .22s var(--ease);}
+@keyframes modalIn{from{opacity:0; transform:translateY(10px) scale(.98);} to{opacity:1; transform:none;}}
 .modal.wide{max-width:760px;}
 .modal-head{display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--border);}
 .modal-head h3{font-size:15.5px;}
@@ -176,8 +210,8 @@ tbody tr:hover{background:var(--surface-2);}
 .stat-line b{font-family:"IBM Plex Mono"; font-variant-numeric:tabular-nums;}
 
 .toast-wrap{position:fixed; bottom:20px; right:20px; display:flex; flex-direction:column; gap:8px; z-index:200;}
-.toast{background:var(--text); color:var(--bg); padding:10px 16px; border-radius:8px; font-size:13px; box-shadow:0 8px 24px rgba(0,0,0,.25); animation:toastin .15s ease;}
-@keyframes toastin{from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:none;}}
+.toast{background:var(--text); color:var(--bg); padding:11px 17px; border-radius:10px; font-size:13px; font-weight:500; box-shadow:0 10px 30px rgba(0,0,0,.28),0 0 0 1px rgba(255,255,255,.04); animation:toastin .22s var(--ease);}
+@keyframes toastin{from{opacity:0; transform:translateY(8px) scale(.97);} to{opacity:1; transform:none;}}
 
 .po-items-table input{padding:6px 8px; font-size:12.5px;}
 .link-btn{background:none;border:none;color:var(--accent);font-weight:600;font-size:12.5px;padding:0;}
@@ -192,12 +226,19 @@ tbody tr:hover{background:var(--surface-2);}
 .cov-fill{height:100%; border-radius:99px;}
 .cov-fill.green{background:var(--success);} .cov-fill.amber{background:var(--warning);} .cov-fill.red{background:var(--danger);}
 .cov-pct{font-size:11px; font-weight:700; color:var(--text-muted); min-width:32px; text-align:right;}
-.dash-hero{display:flex; align-items:center; gap:18px; padding:20px 22px; border-radius:var(--radius); background:linear-gradient(120deg,#1B2140 0%,#2F6FED 130%); color:#fff; margin-bottom:16px; box-shadow:var(--shadow);}
-@media (prefers-color-scheme: light){.dash-hero{background:linear-gradient(120deg,#161B2E 0%,#2F6FED 140%);}}
-.dash-hero .dash-hero-logo{width:52px;height:52px;border-radius:12px;background:#fff;padding:6px;flex:none;box-shadow:0 4px 14px rgba(0,0,0,.25);}
+.dash-hero{position:relative; overflow:hidden; display:flex; align-items:center; gap:18px; padding:22px 24px; border-radius:var(--radius-lg);
+  background:radial-gradient(ellipse 500px 260px at 15% 0%, rgba(255,255,255,.12), transparent 60%), linear-gradient(120deg,#11162B 0%,#2F6FED 145%);
+  color:#fff; margin-bottom:16px; box-shadow:var(--shadow-lg);}
+@media (prefers-color-scheme: light){.dash-hero{background:radial-gradient(ellipse 500px 260px at 15% 0%, rgba(255,255,255,.14), transparent 60%), linear-gradient(120deg,#161B2E 0%,#2F6FED 150%);}}
+.dash-hero::after{content:""; position:absolute; inset:0; pointer-events:none;
+  background-image:linear-gradient(rgba(255,255,255,.06) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.06) 1px, transparent 1px);
+  background-size:34px 34px;
+  -webkit-mask-image:linear-gradient(115deg, transparent 30%, #000 75%);
+  mask-image:linear-gradient(115deg, transparent 30%, #000 75%);}
+.dash-hero .dash-hero-logo{position:relative; z-index:1; width:52px;height:52px;border-radius:13px;background:#fff;padding:6px;flex:none;box-shadow:0 6px 18px rgba(0,0,0,.3),0 0 0 1px rgba(255,255,255,.08);}
 .dash-hero .dash-hero-logo img{width:100%;height:100%;object-fit:contain;display:block;}
-.dash-hero h2{color:#fff; font-size:19px; margin:0;}
-.dash-hero .hint{color:rgba(255,255,255,.78); margin-top:3px; font-size:12.5px;}
+.dash-hero h2{position:relative; z-index:1; color:#fff; font-size:19px; margin:0;}
+.dash-hero .hint{position:relative; z-index:1; color:rgba(255,255,255,.8); margin-top:3px; font-size:12.5px;}
 .breakdown-card{display:flex; flex-direction:column; gap:10px;}
 .breakdown-bar{display:flex; height:14px; border-radius:99px; overflow:hidden; background:var(--surface-2); width:100%;}
 .breakdown-seg{height:100%;}
@@ -208,16 +249,41 @@ tbody tr:hover{background:var(--surface-2);}
 .dash-toolbar select{min-width:0;}
 .filter-label{font-size:10.5px; color:var(--text-faint); text-transform:uppercase; letter-spacing:.05em; margin-bottom:3px; display:block;}
 .filter-field{display:flex; flex-direction:column;}
-.auth-wrap{min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px; background:var(--bg);}
-.auth-card{background:var(--surface); border:1px solid var(--border); border-radius:14px; box-shadow:var(--shadow); padding:32px 28px; width:100%; max-width:360px; text-align:center;}
-.auth-logo{width:64px;height:64px;border-radius:14px;background:#fff;border:1px solid var(--border);padding:8px;margin:0 auto 16px;box-shadow:var(--shadow);}
+.auth-wrap{min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px; position:relative; overflow:hidden;
+  background:
+    radial-gradient(ellipse 900px 520px at 50% -8%, rgba(63,125,255,.35), transparent 62%),
+    radial-gradient(ellipse 700px 460px at 92% 108%, rgba(63,125,255,.14), transparent 60%),
+    #05070d;
+}
+.auth-wrap::before{content:""; position:absolute; inset:0; pointer-events:none;
+  background-image:
+    linear-gradient(rgba(255,255,255,.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.05) 1px, transparent 1px);
+  background-size:44px 44px;
+  -webkit-mask-image:radial-gradient(ellipse 950px 640px at 50% 15%, #000 35%, transparent 78%);
+  mask-image:radial-gradient(ellipse 950px 640px at 50% 15%, #000 35%, transparent 78%);
+}
+.auth-card{position:relative; z-index:1; background:rgba(15,19,33,.74); backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px);
+  border:1px solid rgba(255,255,255,.09); border-radius:18px;
+  box-shadow:0 0 0 1px rgba(255,255,255,.02), 0 30px 80px rgba(0,0,0,.6), 0 0 70px rgba(63,125,255,.10);
+  padding:42px 34px; width:100%; max-width:380px; text-align:center;}
+.auth-logo{width:58px;height:58px;border-radius:14px;background:#fff;padding:8px;margin:0 auto 22px;
+  box-shadow:0 0 0 1px rgba(255,255,255,.12), 0 10px 28px rgba(63,125,255,.4);}
 .auth-logo img{width:100%;height:100%;object-fit:contain;display:block;}
-.auth-title{font-size:17px;}
-.auth-sub{color:var(--text-muted); font-size:12.5px; margin-top:4px;}
-.auth-splash-msg{color:var(--text-muted); font-size:13px; margin-top:4px;}
-.auth-error{background:var(--danger-weak); color:var(--danger); border-radius:8px; padding:9px 12px; font-size:12.5px; margin-top:14px; text-align:left;}
-.auth-card .field label{text-align:left;}
-.auth-card .field{text-align:left;}
+.auth-eyebrow{font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.22em; text-transform:uppercase; color:#6f9bff; margin-bottom:12px;}
+.auth-title{font-family:'Manrope',sans-serif; font-size:23px; font-weight:800; letter-spacing:.01em; text-transform:uppercase; color:#f5f7fc; margin:0;}
+.auth-sub{color:#8891ab; font-size:12.5px; margin-top:7px;}
+.auth-splash-msg{color:#8891ab; font-size:12.5px; margin-top:14px; font-family:'IBM Plex Mono',monospace; letter-spacing:.03em;}
+.auth-error{background:rgba(217,58,70,.16); color:#ff8f98; border:1px solid rgba(217,58,70,.32); border-radius:8px; padding:9px 12px; font-size:12.5px; margin-top:18px; text-align:left;}
+.auth-card .field{text-align:left; margin-top:16px;}
+.auth-card .field label{text-align:left; color:#8b93b3; font-size:10.5px; text-transform:uppercase; letter-spacing:.07em; font-weight:600;}
+.auth-card .field input{background:rgba(255,255,255,.045); border:1px solid rgba(255,255,255,.13); color:#f5f7fc; border-radius:9px;}
+.auth-card .field input::placeholder{color:#5c6482;}
+.auth-card .field input:focus{border-color:#5b8dfa; box-shadow:0 0 0 3px rgba(91,141,250,.28); outline:none;}
+.auth-card .btn-primary{background:linear-gradient(180deg,#4a86ff,#2f6fed); border:none; box-shadow:0 10px 26px rgba(47,111,237,.42); letter-spacing:.05em; text-transform:uppercase; font-size:12.5px; font-weight:700; transition:transform .15s ease, box-shadow .15s ease;}
+.auth-card .btn-primary:hover{transform:translateY(-1px); box-shadow:0 12px 32px rgba(47,111,237,.55);}
+.auth-status{margin-top:26px; font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.1em; color:#3ddc84; text-transform:uppercase;}
+.auth-status .dot{display:inline-block; width:6px; height:6px; border-radius:50%; background:#3ddc84; margin-right:7px; box-shadow:0 0 8px #3ddc84;}
 @media (max-width:640px){
   #sidebar{position:fixed; left:0; top:0; transform:translateX(-100%); box-shadow:0 0 0 100vmax rgba(0,0,0,0);}
   #sidebar.open{transform:translateX(0);}
@@ -297,7 +363,9 @@ var state = {
   vendors: [],
   purchaseOrders: [],
   transactions: [],
-  settings: { companyName:"DECRR Procurement", companyTagline:"Procurement & Inventory System", currency:"₹", lowStockThresholdPct:50, partialStockThresholdPct:60, materialTypes: DEFAULT_MATERIAL_TYPES.slice(), uomList: DEFAULT_UOM.slice(), poPrefix:"PO-2026-", sites: ["Site 1 - Tower A","Site 2 - Tower B","Central Warehouse"] },
+  payments: [],
+  bills: [],
+  settings: { companyName:"DECRR Interio", companyTagline:"Procurement & Inventory System", currency:"₹", lowStockThresholdPct:50, partialStockThresholdPct:60, mailReminderDays:21, supplyStopDays:60, materialTypes: DEFAULT_MATERIAL_TYPES.slice(), uomList: DEFAULT_UOM.slice(), poPrefix:"PO-2026-", sites: ["Site 1 - Tower A","Site 2 - Tower B","Central Warehouse"] },
   ui: {
     materials: { editingId:null, search:"", typeFilter:"All" },
     vendors: { editingId:null, search:"" },
@@ -307,6 +375,7 @@ var state = {
     receive: { materialId:"", poId:"", qty:"", rate:"", remark:"", date: todayISO() },
     issue: { materialId:"", qty:"", siteId:"", remark:"", date: todayISO() },
     reports: { tab:"valuation", ledgerMaterialId:"", siteFilter:"All" },
+    payment: { amount:"", date: todayISO(), remark:"" },
     modal: null
   }
 };
@@ -438,6 +507,11 @@ function pendingOrderedQty(materialId){
 }
 function poItemsTotal(po){ return po.items.reduce(function(s,it){ return s+num(it.qty,0)*num(it.rate,0); },0); }
 function poReceivedTotal(po){ return po.items.reduce(function(s,it){ return s+num(it.receivedQty,0)*num(it.rate,0); },0); }
+// GST helpers — poItemsTotal() above stays the pre-tax (taxable) value, unchanged, since it's
+// used throughout for stock valuation and reporting; these add the GST layer on top for display.
+function poItemGstAmount(it){ return num(it.qty,0)*num(it.rate,0)*num(it.gstPct,0)/100; }
+function poItemsGstTotal(po){ return po.items.reduce(function(s,it){ return s+poItemGstAmount(it); },0); }
+function poItemsGrandTotal(po){ return poItemsTotal(po) + poItemsGstTotal(po); }
 function computePoStatus(po){
   var totalQty = po.items.reduce(function(s,it){return s+num(it.qty,0);},0);
   var recvQty = po.items.reduce(function(s,it){return s+num(it.receivedQty,0);},0);
@@ -445,6 +519,109 @@ function computePoStatus(po){
   if(recvQty<=0) return "Placed";
   if(recvQty>=totalQty) return "Received";
   return "Partial";
+}
+
+/* ============================= vendor ledger (bills / payments / credit period) =============================
+   A vendor's "amount due" is never derived from a single PO. It comes from a proper running ledger:
+   every Bill (the vendor's actual tax invoice — its own date, number and amount, entered separately from
+   the PO) is a debit, every Payment is a credit, and the balance is the sum of all of them. The due date
+   for aging (Overdue / Due Soon) is based on the Bill Date (the tax invoice date) plus the vendor's credit
+   period, applied FIFO against the oldest unpaid bill — the same way a real accounts-payable ledger ages. */
+function vendorById(id){ return state.vendors.filter(function(v){return v.id===id;})[0] || null; }
+function addDaysISO(dateStr, days){
+  var d = dateStr ? new Date(dateStr+"T00:00:00") : new Date();
+  if(isNaN(d.getTime())) d = new Date();
+  d.setDate(d.getDate()+num(days,30));
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
+function poBills(poId){ return state.bills.filter(function(b){return b.poId===poId;}); }
+function poBilledTotal(poId){ return poBills(poId).reduce(function(s,b){return s+num(b.amount,0);},0); }
+function vendorBills(vendorId){ return state.bills.filter(function(b){return b.vendorId===vendorId;}); }
+function vendorPayments(vendorId){ return state.payments.filter(function(p){return p.vendorId===vendorId;}); }
+function vendorTotalBilled(vendorId){ return vendorBills(vendorId).reduce(function(s,b){return s+num(b.amount,0);},0); }
+function vendorTotalPaid(vendorId){ return vendorPayments(vendorId).reduce(function(s,p){return s+num(p.amount,0);},0); }
+function vendorBalanceDue(vendorId){ return round2(vendorTotalBilled(vendorId) - vendorTotalPaid(vendorId)); }
+// Ledger: bills (debit) + payments (credit), oldest first, with a running balance — same shape as the
+// existing material stock ledger, applied to money instead of quantity.
+function vendorLedgerEntries(vendorId){
+  var entries = [];
+  vendorBills(vendorId).forEach(function(b){
+    entries.push({date:b.date||b.billDate, kind:"bill", id:b.id, ref:(b.billNumber?("Tax Invoice "+b.billNumber):"Bill"), poId:b.poId||"", remark:b.remark||"", debit:num(b.amount,0), credit:0, createdAt:b.createdAt||""});
+  });
+  vendorPayments(vendorId).forEach(function(p){
+    entries.push({date:p.date, kind:"payment", id:p.id, ref:"Payment", poId:"", remark:p.remark||"", debit:0, credit:num(p.amount,0), createdAt:p.createdAt||""});
+  });
+  entries.sort(function(a,b){
+    var d = (a.date||"").localeCompare(b.date||""); if(d!==0) return d;
+    return (a.createdAt||"").localeCompare(b.createdAt||"");
+  });
+  var running = 0;
+  entries.forEach(function(e){ running = round2(running + e.debit - e.credit); e.balance = running; });
+  return entries;
+}
+// Walks bills oldest-first, applying total payments FIFO, to find the oldest bill that is not yet
+// fully covered — that bill's due date drives the vendor's Overdue / Due Soon status.
+function vendorOldestUnpaidBill(vendorId){
+  var bills = vendorBills(vendorId).slice().sort(function(a,b){return (a.billDate||"").localeCompare(b.billDate||"");});
+  var pool = vendorTotalPaid(vendorId);
+  for(var i=0;i<bills.length;i++){
+    var amt = num(bills[i].amount,0);
+    if(pool >= amt - 0.004){ pool -= amt; continue; }
+    return {bill:bills[i], remaining:round2(amt-pool)};
+  }
+  return null;
+}
+function vendorDueDate(vendorId){
+  var oldest = vendorOldestUnpaidBill(vendorId); if(!oldest) return "";
+  var vendor = vendorById(vendorId);
+  var creditDays = vendor ? num(vendor.creditPeriodDays,30) : 30;
+  return addDaysISO(oldest.bill.billDate, creditDays);
+}
+// Days Overdue = Today − Due Date (of the oldest unpaid bill). Negative means not due yet.
+// The three action tiers below (Supply Continue / Please Mail / Supply Stop) mirror the
+// classic bill-wise vendor ageing sheet: mild or no overdue keeps supply going, crossing the
+// Mail Reminder threshold means chase payment, and crossing the Supply Stop threshold means
+// stop supplying that vendor until they pay. Both thresholds are configurable in Settings.
+function vendorDaysOverdue(vendorId){
+  var dueDate = vendorDueDate(vendorId); if(!dueDate) return null;
+  var today = todayISO();
+  return Math.round((new Date(today+"T00:00:00") - new Date(dueDate+"T00:00:00")) / 86400000);
+}
+function vendorPayableSummary(vendorId){
+  var balanceDue = vendorBalanceDue(vendorId);
+  var billCount = vendorBills(vendorId).length;
+  if(balanceDue<=0.004) return {balanceDue:0, dueDate:"", daysOverdue:null, tone:"green", label:"Paid Up", billCount:billCount};
+  var dueDate = vendorDueDate(vendorId);
+  var daysOverdue = vendorDaysOverdue(vendorId);
+  var stopDays = num(state.settings.supplyStopDays,60);
+  var mailDays = num(state.settings.mailReminderDays,21);
+  var tone="blue", label="Supply Continue";
+  if(daysOverdue!==null && daysOverdue>stopDays){ tone="red"; label="Badly Overdue — Supply Stop"; }
+  else if(daysOverdue!==null && daysOverdue>=mailDays){ tone="amber"; label="Overdue — Please Mail"; }
+  return {balanceDue:balanceDue, dueDate:dueDate, daysOverdue:daysOverdue, tone:tone, label:label, billCount:billCount};
+}
+function addBill(poId, vendorId, billNumber, billDate, amount, remark){
+  if(!(amount>0)){ toast("Enter a bill amount greater than 0.","danger"); return Promise.resolve(false); }
+  if(!vendorId){ toast("This bill needs a vendor.","danger"); return Promise.resolve(false); }
+  var id = uid("bill");
+  var data = {id:id, poId:poId||"", vendorId:vendorId, billNumber:(billNumber||"").trim(), billDate:billDate||todayISO(), amount:num(amount,0), remark:(remark||"").trim()};
+  return persist("bills", id, data).then(function(){ toast("Bill of "+fmtCurrency(amount)+" recorded."); return true; }).catch(function(){ return false; });
+}
+function deleteBill(id){
+  var b = state.bills.filter(function(x){return x.id===id;})[0]; if(!b) return;
+  if(!confirmAction("Delete this bill of "+fmtCurrency(b.amount)+"? This cannot be undone.")) return;
+  persist("bills", id, null, true).then(function(){ toast("Bill deleted."); });
+}
+function recordPayment(vendorId, amount, date, remark){
+  if(!(amount>0)){ toast("Enter a payment amount greater than 0.","danger"); return Promise.resolve(false); }
+  var id = uid("pay");
+  var data = {id:id, vendorId:vendorId, amount:num(amount,0), date:date||todayISO(), remark:(remark||"").trim()};
+  return persist("payments", id, data).then(function(){ toast("Payment of "+fmtCurrency(amount)+" recorded."); return true; }).catch(function(){ return false; });
+}
+function deletePayment(id){
+  var p = state.payments.filter(function(x){return x.id===id;})[0]; if(!p) return;
+  if(!confirmAction("Delete this payment record of "+fmtCurrency(p.amount)+"? This cannot be undone.")) return;
+  persist("payments", id, null, true).then(function(){ toast("Payment record deleted."); });
 }
 function dashboardRow(material){
   var stock = stockFor(material.id);
@@ -488,7 +665,7 @@ function materialById(id){ return state.materials.filter(function(m){return m.id
 // "nothing unless the request comes from a signed-in user."
 var supa = null;
 var realtimeChannel = null;
-var KIND_TABLE = { materials:"materials", vendors:"vendors", purchaseOrders:"purchase_orders", transactions:"transactions" };
+var KIND_TABLE = { materials:"materials", vendors:"vendors", purchaseOrders:"purchase_orders", transactions:"transactions", payments:"payments", bills:"bills" };
 
 function initApp(){
   if(!(window.supabase && typeof window.supabase.createClient==="function")){
@@ -551,7 +728,8 @@ function toSnakeRow(kind, obj){
       preferred_vendor_id: obj.preferredVendorId || null };
   }
   if(kind==="vendors"){
-    return { id:obj.id, name:obj.name||"", contact:obj.contact||"", phone:obj.phone||"", email:obj.email||"", address:obj.address||"", gstin:obj.gstin||"" };
+    return { id:obj.id, name:obj.name||"", contact:obj.contact||"", phone:obj.phone||"", email:obj.email||"", address:obj.address||"", gstin:obj.gstin||"",
+      credit_period_days: num(obj.creditPeriodDays,30) };
   }
   if(kind==="purchaseOrders"){
     return { id:obj.id, po_number:obj.poNumber||"", vendor_id:obj.vendorId||null, date:obj.date||null, status:obj.status||"Placed", terms:obj.terms||"" };
@@ -559,6 +737,12 @@ function toSnakeRow(kind, obj){
   if(kind==="transactions"){
     return { id:obj.id, material_id:obj.materialId||null, material_name:obj.materialName||"", type:obj.type||"", qty:num(obj.qty,0), rate:num(obj.rate,0),
       po_id:obj.poId||null, po_number:obj.poNumber||"", date:obj.date||null, site_id:obj.siteId||"", remark:obj.remark||"" };
+  }
+  if(kind==="payments"){
+    return { id:obj.id, vendor_id:obj.vendorId||null, amount:num(obj.amount,0), date:obj.date||null, remark:obj.remark||"" };
+  }
+  if(kind==="bills"){
+    return { id:obj.id, po_id:obj.poId||null, vendor_id:obj.vendorId||null, bill_number:obj.billNumber||"", bill_date:obj.billDate||null, amount:num(obj.amount,0), remark:obj.remark||"" };
   }
   return obj;
 }
@@ -568,7 +752,8 @@ function fromSnakeRow(kind, row){
       siteRequirement:num(row.site_requirement,0), purchaseRate:num(row.purchase_rate,0), preferredVendorId: row.preferred_vendor_id || "" };
   }
   if(kind==="vendors"){
-    return { id:row.id, name:row.name||"", contact:row.contact||"", phone:row.phone||"", email:row.email||"", address:row.address||"", gstin:row.gstin||"" };
+    return { id:row.id, name:row.name||"", contact:row.contact||"", phone:row.phone||"", email:row.email||"", address:row.address||"", gstin:row.gstin||"",
+      creditPeriodDays: num(row.credit_period_days,30) };
   }
   if(kind==="purchaseOrders"){
     return { id:row.id, poNumber:row.po_number||"", vendorId:row.vendor_id||"", date:row.date||"", status:row.status||"Placed", terms:row.terms||"", items:[] };
@@ -576,6 +761,12 @@ function fromSnakeRow(kind, row){
   if(kind==="transactions"){
     return { id:row.id, materialId:row.material_id||"", materialName:row.material_name||"", type:row.type||"", qty:num(row.qty,0), rate:num(row.rate,0),
       poId:row.po_id||"", poNumber:row.po_number||"", date:row.date||"", siteId:row.site_id||"", remark:row.remark||"", createdAt:row.created_at||"" };
+  }
+  if(kind==="payments"){
+    return { id:row.id, vendorId:row.vendor_id||"", amount:num(row.amount,0), date:row.date||"", remark:row.remark||"", createdAt:row.created_at||"" };
+  }
+  if(kind==="bills"){
+    return { id:row.id, poId:row.po_id||"", vendorId:row.vendor_id||"", billNumber:row.bill_number||"", billDate:row.bill_date||"", amount:num(row.amount,0), remark:row.remark||"", createdAt:row.created_at||"" };
   }
   return row;
 }
@@ -590,7 +781,7 @@ function syncPoItems(poId, items){
     if(delRes.error) throw delRes.error;
     if(!items || !items.length) return;
     var rows = items.map(function(it){
-      return { po_id:poId, material_id:it.materialId||null, material_name:it.materialName||"", qty:num(it.qty,0), rate:num(it.rate,0), received_qty:num(it.receivedQty,0), remark:it.remark||"" };
+      return { po_id:poId, material_id:it.materialId||null, material_name:it.materialName||"", qty:num(it.qty,0), rate:num(it.rate,0), gst_pct:num(it.gstPct,18), received_qty:num(it.receivedQty,0), remark:it.remark||"" };
     });
     return supa.from("po_items").insert(rows).then(function(insRes){ if(insRes.error) throw insRes.error; });
   });
@@ -622,6 +813,7 @@ function persistSettings(){
   var s = state.settings;
   var row = { id:"config", company_name:s.companyName, company_tagline:s.companyTagline, currency:s.currency,
     low_stock_threshold_pct:num(s.lowStockThresholdPct,50), partial_stock_threshold_pct:num(s.partialStockThresholdPct,60),
+    mail_reminder_days:num(s.mailReminderDays,21), supply_stop_days:num(s.supplyStopDays,60),
     po_prefix:s.poPrefix, material_types:s.materialTypes, uom_list:s.uomList, sites:s.sites };
   return supa.from("settings").upsert(row).then(function(res){ if(res.error) throw res.error; });
 }
@@ -632,16 +824,20 @@ function loadAllData(){
     supa.from("purchase_orders").select("*"),
     supa.from("po_items").select("*"),
     supa.from("transactions").select("*"),
-    supa.from("settings").select("*").eq("id","config").maybeSingle()
+    supa.from("settings").select("*").eq("id","config").maybeSingle(),
+    supa.from("payments").select("*"),
+    supa.from("bills").select("*")
   ]).then(function(results){
-    var matRes=results[0], venRes=results[1], poRes=results[2], itemsRes=results[3], txRes=results[4], setRes=results[5];
-    [matRes,venRes,poRes,itemsRes,txRes,setRes].forEach(function(r){ if(r && r.error) console.error(r.error); });
+    var matRes=results[0], venRes=results[1], poRes=results[2], itemsRes=results[3], txRes=results[4], setRes=results[5], payRes=results[6], billRes=results[7];
+    [matRes,venRes,poRes,itemsRes,txRes,setRes,payRes,billRes].forEach(function(r){ if(r && r.error) console.error(r.error); });
+    state.payments = (payRes.data||[]).map(function(r){ return fromSnakeRow("payments", r); });
+    state.bills = (billRes.data||[]).map(function(r){ return fromSnakeRow("bills", r); });
     state.materials = (matRes.data||[]).map(function(r){ return fromSnakeRow("materials", r); });
     state.vendors = (venRes.data||[]).map(function(r){ return fromSnakeRow("vendors", r); });
     var itemsByPo = {};
     (itemsRes.data||[]).forEach(function(it){
       var arr = itemsByPo[it.po_id] || (itemsByPo[it.po_id]=[]);
-      arr.push({ materialId: it.material_id||"", materialName: it.material_name||"", qty:num(it.qty,0), rate:num(it.rate,0), receivedQty:num(it.received_qty,0), remark: it.remark||"" });
+      arr.push({ materialId: it.material_id||"", materialName: it.material_name||"", qty:num(it.qty,0), rate:num(it.rate,0), gstPct:num(it.gst_pct,18), receivedQty:num(it.received_qty,0), remark: it.remark||"" });
     });
     state.purchaseOrders = (poRes.data||[]).map(function(r){
       var po = fromSnakeRow("purchaseOrders", r);
@@ -654,6 +850,7 @@ function loadAllData(){
       state.settings = Object.assign({}, state.settings, {
         companyName:d.company_name, companyTagline:d.company_tagline, currency:d.currency,
         lowStockThresholdPct:num(d.low_stock_threshold_pct,50), partialStockThresholdPct:num(d.partial_stock_threshold_pct,60),
+        mailReminderDays:num(d.mail_reminder_days,21), supplyStopDays:num(d.supply_stop_days,60),
         poPrefix:d.po_prefix, materialTypes:(d.material_types&&d.material_types.length?d.material_types:DEFAULT_MATERIAL_TYPES.slice()),
         uomList:(d.uom_list&&d.uom_list.length?d.uom_list:DEFAULT_UOM.slice()), sites:d.sites||[]
       });
@@ -672,6 +869,8 @@ function wireRealtime(){
     .on("postgres_changes", {event:"*", schema:"public", table:"po_items"}, reload)
     .on("postgres_changes", {event:"*", schema:"public", table:"transactions"}, reload)
     .on("postgres_changes", {event:"*", schema:"public", table:"settings"}, reload)
+    .on("postgres_changes", {event:"*", schema:"public", table:"payments"}, reload)
+    .on("postgres_changes", {event:"*", schema:"public", table:"bills"}, reload)
     .subscribe();
 }
 
@@ -752,7 +951,7 @@ function generatePoPdfBlob(po){
       }
     }catch(e){ /* if the image ever fails to decode, fall back to text-only letterhead */ }
     doc.setFont("helvetica","bold"); doc.setFontSize(15); doc.setTextColor(20,24,46);
-    doc.text(state.settings.companyName || "DECRR Procurement", textX, 34);
+    doc.text(state.settings.companyName || "DECRR Interio", textX, 34);
     doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(100);
     doc.text(state.settings.companyTagline || "Procurement & Inventory System", textX, 48);
 
@@ -768,7 +967,7 @@ function generatePoPdfBlob(po){
   function drawFooter(){
     doc.setDrawColor(230); doc.line(margin, pageHeight-40, pageWidth-margin, pageHeight-40);
     doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(140);
-    doc.text((state.settings.companyName||"DECRR Procurement")+"  ·  Generated on "+fmtDate(todayISO()), margin, pageHeight-26);
+    doc.text((state.settings.companyName||"DECRR Interio")+"  ·  Generated on "+fmtDate(todayISO()), margin, pageHeight-26);
     doc.text("Page "+pageNum, pageWidth-margin, pageHeight-26, {align:"right"});
   }
 
@@ -788,12 +987,14 @@ function generatePoPdfBlob(po){
 
   // ---- item table: wraps long material/remark text and grows each row's height to fit ----
   var cols = [
-    {label:"Material", width:140, align:"left"},
-    {label:"UOM", width:36, align:"center"},
-    {label:"Qty", width:44, align:"right"},
-    {label:"Rate", width:66, align:"right"},
-    {label:"Amount", width:80, align:"right"},
-    {label:"Remarks", width:145, align:"left"}
+    {label:"Material", width:118, align:"left"},
+    {label:"UOM", width:32, align:"center"},
+    {label:"Qty", width:38, align:"right"},
+    {label:"Rate", width:58, align:"right"},
+    {label:"Taxable", width:64, align:"right"},
+    {label:"GST", width:44, align:"right"},
+    {label:"Amount", width:70, align:"right"},
+    {label:"Remarks", width:87, align:"left"}
   ];
   var tableWidth = cols.reduce(function(s,c){return s+c.width;},0);
   var lineH = 11;
@@ -829,27 +1030,33 @@ function generatePoPdfBlob(po){
   po.items.forEach(function(it, idx){
     var m = materialById(it.materialId);
     var materialLines = wrapped(it.materialName||"—", 0);
-    var remarkLines = wrapped(it.remark||"—", 5);
+    var remarkLines = wrapped(it.remark||"—", 7);
     var rowH = Math.max(24, Math.max(materialLines.length, remarkLines.length)*lineH + 10);
     if(y + rowH > bottomLimit) startNewPage();
     if(idx%2===1){ doc.setFillColor(245,246,250); doc.rect(margin, y, tableWidth, rowH, "F"); }
+    var taxable = num(it.qty,0)*num(it.rate,0);
     doc.setTextColor(30,34,58);
     drawCellLines(materialLines, 0, y, rowH);
     drawCellLines([m?m.uom:""], 1, y, rowH);
     drawCellLines([fmtNum(it.qty)], 2, y, rowH);
     drawCellLines([fmtCurrencyPdf(it.rate)], 3, y, rowH);
-    drawCellLines([fmtCurrencyPdf(num(it.qty,0)*num(it.rate,0))], 4, y, rowH);
+    drawCellLines([fmtCurrencyPdf(taxable)], 4, y, rowH);
+    drawCellLines([fmtNum(it.gstPct)+"%"], 5, y, rowH);
+    drawCellLines([fmtCurrencyPdf(taxable+poItemGstAmount(it))], 6, y, rowH);
     doc.setTextColor(90,96,120);
-    drawCellLines(remarkLines, 5, y, rowH);
+    drawCellLines(remarkLines, 7, y, rowH);
     doc.setDrawColor(228);
     doc.line(margin, y+rowH, margin+tableWidth, y+rowH);
     y += rowH;
   });
 
-  if(y + 40 > bottomLimit) startNewPage();
-  y += 24;
+  if(y + 60 > bottomLimit) startNewPage();
+  y += 20;
+  doc.setFont("helvetica","normal"); doc.setFontSize(10); doc.setTextColor(70);
+  doc.text("Subtotal: "+fmtCurrencyPdf(poItemsTotal(po)), pageWidth-margin, y, {align:"right"}); y += 15;
+  doc.text("GST: "+fmtCurrencyPdf(poItemsGstTotal(po)), pageWidth-margin, y, {align:"right"}); y += 17;
   doc.setFont("helvetica","bold"); doc.setFontSize(11.5); doc.setTextColor(20,24,46);
-  doc.text("Total: "+fmtCurrencyPdf(poItemsTotal(po)), pageWidth-margin, y, {align:"right"});
+  doc.text("Grand Total: "+fmtCurrencyPdf(poItemsGrandTotal(po)), pageWidth-margin, y, {align:"right"});
 
   // ---- terms & conditions / remarks ----
   var termsText = (po.terms||"").trim() || "No remarks recorded for this order.";
@@ -874,7 +1081,7 @@ function generatePoPdfBlob(po){
   doc.line(margin, y, margin+170, y);
   doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(90);
   doc.text("Authorised Signatory", margin, y+13);
-  doc.text("For "+(state.settings.companyName||"DECRR Procurement"), margin, y-8);
+  doc.text("For "+(state.settings.companyName||"DECRR Interio"), margin, y-8);
 
   drawFooter();
   return doc.output("blob");
@@ -915,13 +1122,13 @@ function emailPoToVendor(poId){
   if(!vendor || !vendor.email){ toast("This vendor has no email on file — add one from the Vendors page.","danger"); return; }
   downloadPoPdf(poId, true).then(function(ok){
     try{
-      var subject = "Purchase Order "+po.poNumber+" — "+(state.settings.companyName||"DECRR Procurement");
-      var lines = po.items.map(function(it){ return "- "+it.materialName+": "+fmtNum(it.qty)+" x "+fmtCurrency(it.rate)+" = "+fmtCurrency(num(it.qty,0)*num(it.rate,0))+(it.remark?"  ["+it.remark+"]":""); });
+      var subject = "Purchase Order "+po.poNumber+" — "+(state.settings.companyName||"DECRR Interio");
+      var lines = po.items.map(function(it){ return "- "+it.materialName+": "+fmtNum(it.qty)+" x "+fmtCurrency(it.rate)+" = "+fmtCurrency(num(it.qty,0)*num(it.rate,0))+" + GST "+fmtNum(it.gstPct)+"%"+(it.remark?"  ["+it.remark+"]":""); });
       var body = "Dear "+(vendor.contact||vendor.name)+",\n\n"+
         "Please find our purchase order "+po.poNumber+" dated "+fmtDate(po.date)+" summarised below"+(ok?" — a PDF copy has just been downloaded to your device, please attach it here before sending":"")+".\n\n"+
-        lines.join("\n")+"\n\nTotal: "+fmtCurrency(poItemsTotal(po))+"\n\n"+
+        lines.join("\n")+"\n\nSubtotal: "+fmtCurrency(poItemsTotal(po))+"\nGST: "+fmtCurrency(poItemsGstTotal(po))+"\nGrand Total: "+fmtCurrency(poItemsGrandTotal(po))+"\n\n"+
         "Remarks / Terms & Conditions:\n"+(po.terms||"—")+"\n\n"+
-        "Kindly confirm receipt and expected delivery date.\n\nRegards,\n"+(state.settings.companyName||"DECRR Procurement");
+        "Kindly confirm receipt and expected delivery date.\n\nRegards,\n"+(state.settings.companyName||"DECRR Interio");
       var href = "mailto:"+encodeURIComponent(vendor.email)+"?subject="+encodeURIComponent(subject)+"&body="+encodeURIComponent(body);
       var a = document.createElement("a"); a.href = href; a.target = "_blank"; a.rel = "noopener";
       document.body.appendChild(a); a.click(); a.remove();
@@ -1032,19 +1239,25 @@ function renderNow(){
 }
 
 function renderSplash(msg){
-  return '<div class="auth-wrap"><div class="auth-card"><div class="auth-logo"><img src="'+LOGO_DATA_URI+'" alt="logo"></div><div class="auth-splash-msg">'+esc(msg)+'</div></div></div>';
+  return '<div class="auth-wrap"><div class="auth-card">' +
+    '<div class="auth-logo"><img src="'+LOGO_DATA_URI+'" alt="logo"></div>' +
+    '<div class="auth-eyebrow">Procurement Control System</div>' +
+    '<div class="auth-splash-msg">'+esc(msg)+'</div>' +
+  '</div></div>';
 }
 function renderLoginScreen(){
   return '<div class="auth-wrap"><div class="auth-card">' +
     '<div class="auth-logo"><img src="'+LOGO_DATA_URI+'" alt="logo"></div>' +
-    '<h2 class="auth-title">'+esc(state.settings.companyName||"DECRR Procurement")+'</h2>' +
+    '<div class="auth-eyebrow">Procurement Control System</div>' +
+    '<h2 class="auth-title">'+esc(state.settings.companyName||"DECRR Interio")+'</h2>' +
     '<div class="auth-sub">Sign in to continue</div>' +
     (state.authError? '<div class="auth-error">'+esc(state.authError)+'</div>' : '') +
     '<form novalidate data-form="login">' +
-      '<div class="field" style="margin-top:14px;"><label for="loginEmail">Email</label><input id="loginEmail" type="email" autocomplete="username" placeholder="you@company.com" required></div>' +
-      '<div class="field" style="margin-top:10px;"><label for="loginPassword">Password</label><input id="loginPassword" type="password" autocomplete="current-password" placeholder="••••••••" required></div>' +
-      '<button type="submit" class="btn btn-primary" style="width:100%;margin-top:16px;justify-content:center;" '+(state.authBusy?"disabled":"")+'>'+(state.authBusy?"Signing in…":"Sign In")+'</button>' +
+      '<div class="field"><label for="loginEmail">Email</label><input id="loginEmail" type="email" autocomplete="username" placeholder="you@company.com" required></div>' +
+      '<div class="field"><label for="loginPassword">Password</label><input id="loginPassword" type="password" autocomplete="current-password" placeholder="••••••••" required></div>' +
+      '<button type="submit" class="btn btn-primary" style="width:100%;margin-top:22px;justify-content:center;" '+(state.authBusy?"disabled":"")+'>'+(state.authBusy?"Signing in…":"Sign In")+'</button>' +
     '</form>' +
+    '<div class="auth-status"><span class="dot"></span>Systems Nominal</div>' +
   '</div></div>';
 }
 function renderSidebar(activeId){
@@ -1053,9 +1266,9 @@ function renderSidebar(activeId){
       '<span class="ic">'+p.icon+'</span><span>'+p.label+'</span></button>';
   }).join("");
   return '<div id="sidebar" class="'+(state.ui.navOpen?"open":"")+'">' +
-    '<div class="brand"><div class="brand-mark brand-mark-logo"><img src="'+LOGO_DATA_URI+'" alt="logo"/></div><div class="brand-text"><b>'+esc(state.settings.companyName||"DECRR Procurement")+'</b><span>'+esc(state.settings.companyTagline||"Procurement & Inventory System")+'</span></div></div>' +
+    '<div class="brand"><div class="brand-mark brand-mark-logo"><img src="'+LOGO_DATA_URI+'" alt="logo"/></div><div class="brand-text"><b>'+esc(state.settings.companyName||"DECRR Interio")+'</b><span>'+esc(state.settings.companyTagline||"Procurement & Inventory System")+'</span></div></div>' +
     '<nav class="navlist">'+items+'</nav>' +
-    '<div class="sidebar-foot">'+esc((state.settings.companyName||"DECRR Procurement").toUpperCase())+'<br>Build 1.0 &middot; live app</div>' +
+    '<div class="sidebar-foot">'+esc((state.settings.companyName||"DECRR Interio").toUpperCase())+'<br>Build 1.0 &middot; live app</div>' +
   '</div>';
 }
 
@@ -1116,7 +1329,7 @@ function pageDashboard(){
 
   var hero = '<div class="dash-hero">' +
     '<div class="dash-hero-logo"><img src="'+LOGO_DATA_URI+'" alt="logo"></div>' +
-    '<div><h2>Welcome back — here\'s your procurement snapshot</h2><div class="hint">'+esc(state.settings.companyName||"DECRR Procurement")+' &middot; '+fmtNum(totalMaterials)+' materials tracked &middot; Stock on hand worth '+fmtCurrency(stockValue)+'</div></div>' +
+    '<div><h2>Welcome back — here\'s your procurement snapshot</h2><div class="hint">'+esc(state.settings.companyName||"DECRR Interio")+' &middot; '+fmtNum(totalMaterials)+' materials tracked &middot; Stock on hand worth '+fmtCurrency(stockValue)+'</div></div>' +
   '</div>';
 
   var kpis = '<div class="grid kpi-row">' +
@@ -1268,7 +1481,7 @@ function renderMaterialList(){
 
 /* ============================= PAGE: vendors ============================= */
 function vendorFormHtml(editing){
-  var v = editing || {name:"",contact:"",phone:"",email:"",address:"",gstin:""};
+  var v = editing || {name:"",contact:"",phone:"",email:"",address:"",gstin:"",creditPeriodDays:30};
   return '<form novalidate data-form="vendor" data-id="'+(editing?editing.id:"")+'">' +
     '<div class="form-grid">' +
       '<div class="field"><label for="venName">Vendor Name <span class="req">*</span></label><input id="venName" name="name" required placeholder="e.g. Shree Electricals & Co." value="'+esc(v.name)+'"></div>' +
@@ -1276,6 +1489,7 @@ function vendorFormHtml(editing){
       '<div class="field"><label for="venPhone">Phone</label><input id="venPhone" name="phone" placeholder="10-digit mobile" value="'+esc(v.phone)+'"></div>' +
       '<div class="field"><label for="venEmail">Email</label><input id="venEmail" name="email" type="email" placeholder="name@company.com" value="'+esc(v.email)+'"></div>' +
       '<div class="field"><label for="venGstin">GSTIN</label><input id="venGstin" name="gstin" placeholder="15-digit GSTIN" value="'+esc(v.gstin)+'"></div>' +
+      '<div class="field"><label for="venCredit">Credit Period (Days)</label><input id="venCredit" name="creditPeriodDays" type="number" min="0" step="1" placeholder="e.g. 30" value="'+esc(v.creditPeriodDays!==undefined?v.creditPeriodDays:30)+'"></div>' +
       '<div class="field" style="grid-column:span 1;"><label for="venAddress">Address</label><input id="venAddress" name="address" placeholder="Street, City" value="'+esc(v.address)+'"></div>' +
     '</div>' +
     '<div style="display:flex;gap:10px;margin-top:14px;">' +
@@ -1306,30 +1520,44 @@ function renderVendorList(){
   if(!rows.length) return emptyState("No vendors found.","&#127970;");
   var body = rows.map(function(v,i){
     var poCount = state.purchaseOrders.filter(function(p){return p.vendorId===v.id;}).length;
+    var pay = vendorPayableSummary(v.id);
     return '<tr>' +
       '<td class="cell-muted">'+(i+1)+'</td>' +
       '<td><b>'+esc(v.name)+'</b><div class="cell-muted">'+esc(v.gstin||"")+'</div></td>' +
       '<td>'+esc(v.contact||"—")+'</td>' +
       '<td class="cell-muted">'+esc(v.phone||"—")+'<br>'+esc(v.email||"")+'</td>' +
-      '<td class="cell-muted">'+esc(v.address||"—")+'</td>' +
+      '<td class="center num">'+fmtNum(v.creditPeriodDays!==undefined?v.creditPeriodDays:30)+' days</td>' +
       '<td class="center">'+poCount+'</td>' +
+      '<td class="right num">'+(pay.balanceDue>0?('<b>'+fmtCurrency(pay.balanceDue)+'</b>'):('<span class="cell-muted">'+fmtCurrency(0)+'</span>'))+'</td>' +
+      '<td>'+statusBadge(pay.tone,pay.label)+'</td>' +
       '<td class="right"><div style="display:flex;gap:6px;justify-content:flex-end;">' +
+        '<button class="iconbtn accent" title="View ledger" data-action="view-vendor-ledger" data-id="'+v.id+'">&#128065;</button>' +
         '<button class="iconbtn" title="Edit" data-action="edit-vendor" data-id="'+v.id+'">&#9998;</button>' +
         '<button class="iconbtn danger" title="Delete" data-action="delete-vendor" data-id="'+v.id+'">&#128465;</button>' +
       '</div></td>' +
     '</tr>';
   }).join("");
-  return '<div class="table-wrap"><table><thead><tr><th>S.No</th><th>Vendor</th><th>Contact</th><th>Phone / Email</th><th>Address</th><th class="center">POs</th><th></th></tr></thead><tbody>'+body+'</tbody></table></div>';
+  return '<div class="table-wrap"><table><thead><tr><th>S.No</th><th>Vendor</th><th>Contact</th><th>Phone / Email</th><th class="center">Credit Period</th><th class="center">POs</th><th class="right">Balance Due</th><th>Status</th><th></th></tr></thead><tbody>'+body+'</tbody></table></div>';
 }
 
 /* ============================= PAGE: purchase orders ============================= */
+var GST_SLABS = [0,5,12,18,28];
 function ensureBuilder(prefillMaterialId){
   if(!state.ui.pos.builder){
-    state.ui.pos.builder = { vendorId:"", date: todayISO(), terms: DEFAULT_PO_TERMS, items:[{materialId: prefillMaterialId||"", qty:"", rate: prefillMaterialId? (materialById(prefillMaterialId)||{}).purchaseRate : "", remark:""}] };
+    state.ui.pos.builder = { vendorId:"", date: todayISO(), terms: DEFAULT_PO_TERMS, items:[{materialId: prefillMaterialId||"", qty:"", rate: prefillMaterialId? (materialById(prefillMaterialId)||{}).purchaseRate : "", gstPct:18, remark:""}] };
   } else if(prefillMaterialId){
-    state.ui.pos.builder.items = [{materialId:prefillMaterialId, qty:"", rate:(materialById(prefillMaterialId)||{}).purchaseRate||"", remark:""}];
+    state.ui.pos.builder.items = [{materialId:prefillMaterialId, qty:"", rate:(materialById(prefillMaterialId)||{}).purchaseRate||"", gstPct:18, remark:""}];
   }
   return state.ui.pos.builder;
+}
+function poBuilderTotals(items){
+  var subtotal=0, gst=0;
+  items.forEach(function(it){
+    var t = num(it.qty,0)*num(it.rate,0);
+    subtotal += t;
+    gst += t*num(it.gstPct,0)/100;
+  });
+  return {subtotal:subtotal, gst:gst, grand:subtotal+gst};
 }
 function pagePOs(){
   var ui = state.ui.pos;
@@ -1338,17 +1566,20 @@ function pagePOs(){
   var matOpts = function(sel){ return state.materials.map(function(m){return '<option value="'+m.id+'" '+(sel===m.id?"selected":"")+'>'+esc(m.name)+' ('+esc(m.uom)+')</option>';}).join(""); };
 
   var itemRows = builder.items.map(function(it,idx){
-    var lineTotal = num(it.qty,0)*num(it.rate,0);
+    var taxable = num(it.qty,0)*num(it.rate,0);
+    var lineTotal = taxable + taxable*num(it.gstPct,0)/100;
+    var gstOpts = GST_SLABS.map(function(g){ return '<option value="'+g+'" '+(num(it.gstPct,18)===g?"selected":"")+'>'+g+'%</option>'; }).join("");
     return '<tr data-idx="'+idx+'">' +
       '<td><select class="po-item-material" data-idx="'+idx+'"><option value="">Select material</option>'+matOpts(it.materialId)+'</select></td>' +
       '<td><input class="po-item-qty" data-idx="'+idx+'" type="number" min="0" step="any" value="'+esc(it.qty)+'" style="width:80px;"></td>' +
       '<td><input class="po-item-rate" data-idx="'+idx+'" type="number" min="0" step="any" value="'+esc(it.rate)+'" style="width:100px;"></td>' +
+      '<td><select class="po-item-gst" data-idx="'+idx+'" style="width:80px;">'+gstOpts+'</select></td>' +
       '<td class="right num" id="poLineTotal_'+idx+'">'+fmtCurrency(lineTotal)+'</td>' +
       '<td><input class="po-item-remark" data-idx="'+idx+'" placeholder="e.g. urgent, sample first" value="'+esc(it.remark||"")+'" style="width:160px;"></td>' +
       '<td class="right"><button type="button" class="iconbtn danger" data-action="po-remove-row" data-idx="'+idx+'" '+(builder.items.length<2?"disabled":"")+'>&#10005;</button></td>' +
     '</tr>';
   }).join("");
-  var grandTotal = builder.items.reduce(function(s,it){return s+num(it.qty,0)*num(it.rate,0);},0);
+  var builderTotals = poBuilderTotals(builder.items);
 
   var builderHtml = '<div class="card card-pad">' +
     '<div class="section-head"><div><h2>Create Purchase Order</h2><div class="hint">Next PO number: <b class="num">'+esc(nextPoNumber())+'</b></div></div></div>' +
@@ -1356,10 +1587,14 @@ function pagePOs(){
       '<div class="field"><label for="poVendor">Vendor <span class="req">*</span></label><select id="poVendor">'+ '<option value="" disabled '+(builder.vendorId?"":"selected")+'>Select vendor</option>' +vendorOpts+'</select></div>' +
       '<div class="field"><label for="poDate">Date <span class="req">*</span></label><input id="poDate" type="date" value="'+esc(builder.date)+'"></div>' +
     '</div>' +
-    '<div class="table-wrap po-items-table" style="margin-top:14px;"><table><thead><tr><th>Material</th><th>Qty</th><th>Rate</th><th class="right">Line Total</th><th>Remarks</th><th></th></tr></thead><tbody id="poItemsBody">'+itemRows+'</tbody></table></div>' +
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;">' +
+    '<div class="table-wrap po-items-table" style="margin-top:14px;"><table><thead><tr><th>Material</th><th>Qty</th><th>Rate</th><th>GST %</th><th class="right">Amount (incl. GST)</th><th>Remarks</th><th></th></tr></thead><tbody id="poItemsBody">'+itemRows+'</tbody></table></div>' +
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-top:12px;">' +
       '<button type="button" class="btn btn-ghost btn-sm" data-action="po-add-row">+ Add Line</button>' +
-      '<div style="font-family:\'Manrope\';font-weight:700;">Total: <span id="poGrandTotal" class="num">'+fmtCurrency(grandTotal)+'</span></div>' +
+      '<div style="font-family:\'Manrope\';text-align:right;">' +
+        '<div class="cell-muted" style="margin-bottom:2px;">Subtotal: <span id="poSubtotal" class="num">'+fmtCurrency(builderTotals.subtotal)+'</span></div>' +
+        '<div class="cell-muted" style="margin-bottom:6px;">GST: <span id="poGstTotal" class="num">'+fmtCurrency(builderTotals.gst)+'</span></div>' +
+        '<div style="font-weight:700;font-size:15px;">Grand Total: <span id="poGrandTotal" class="num">'+fmtCurrency(builderTotals.grand)+'</span></div>' +
+      '</div>' +
     '</div>' +
     '<div class="field" style="margin-top:16px;"><label for="poTerms">Remarks / Notes / Terms &amp; Conditions <span class="req">*</span></label>' +
       '<textarea id="poTerms" rows="4" required placeholder="Delivery, payment, quality or any other terms for this order…">'+esc(builder.terms)+'</textarea>' +
@@ -1665,8 +1900,10 @@ function pageSettings(){
         '<div class="field"><label for="setLowPct">Low Stock Threshold (% of Site Requirement)</label><input id="setLowPct" type="number" min="1" max="100" value="'+esc(s.lowStockThresholdPct)+'"></div>' +
         '<div class="field"><label for="setPartialPct">Partial-Stock Coverage Threshold (%)</label><input id="setPartialPct" type="number" min="1" max="100" value="'+esc(s.partialStockThresholdPct)+'"></div>' +
         '<div class="field"><label for="setPoPrefix">PO Number Prefix</label><input id="setPoPrefix" value="'+esc(s.poPrefix)+'"></div>' +
+        '<div class="field"><label for="setMailDays">Mail Reminder After (Days Overdue)</label><input id="setMailDays" type="number" min="0" value="'+esc(s.mailReminderDays!==undefined?s.mailReminderDays:21)+'"></div>' +
+        '<div class="field"><label for="setStopDays">Supply Stop After (Days Overdue)</label><input id="setStopDays" type="number" min="0" value="'+esc(s.supplyStopDays!==undefined?s.supplyStopDays:60)+'"></div>' +
       '</div>' +
-      '<div class="cell-muted" style="margin-top:8px;">Reorder level = Site Requirement &times; Low Stock Threshold. A material shows <b>Partial Stock</b> on the dashboard when (Available + On Order) covers more than the Partial-Stock Threshold of Requirement, otherwise <b>Purchase Required</b>.</div>' +
+      '<div class="cell-muted" style="margin-top:8px;">Reorder level = Site Requirement &times; Low Stock Threshold. A material shows <b>Partial Stock</b> on the dashboard when (Available + On Order) covers more than the Partial-Stock Threshold of Requirement, otherwise <b>Purchase Required</b>. A vendor payment status turns <b>Please Mail</b> once a bill is overdue past the Mail Reminder days, and <b>Supply Stop</b> once it passes the Supply Stop days.</div>' +
       '<div style="margin-top:14px;"><button type="submit" class="btn btn-primary">Save Preferences</button></div>' +
     '</form>' +
   '</div>' +
@@ -1700,6 +1937,7 @@ function renderModal(){
   if(!modal) return "";
   if(modal.type==="ledger") return modalWrap("Stock Ledger — "+esc((materialById(modal.id)||{}).name||""), ledgerModalBody(modal.id), true);
   if(modal.type==="po-view") return modalWrap("Purchase Order "+esc((state.purchaseOrders.filter(function(p){return p.id===modal.id;})[0]||{}).poNumber||""), poViewBody(modal.id), true);
+  if(modal.type==="vendor-ledger") return modalWrap("Vendor Ledger — "+esc((vendorById(modal.id)||{}).name||""), vendorLedgerBody(modal.id), true);
   return "";
 }
 function modalWrap(title, body, wide){
@@ -1725,15 +1963,43 @@ function statTile(label,value){ return '<div class="card-pad" style="background:
 function poViewBody(poId){
   var po = state.purchaseOrders.filter(function(p){return p.id===poId;})[0]; if(!po) return emptyState("Purchase order not found.");
   var itemRows = po.items.map(function(it){
-    var pending = num(it.qty,0)-num(it.receivedQty,0);
-    return '<tr><td><b>'+esc(it.materialName)+'</b></td><td class="right num">'+fmtNum(it.qty)+'</td><td class="right num">'+fmtCurrency(it.rate)+'</td><td class="right num">'+fmtCurrency(num(it.qty,0)*num(it.rate,0))+'</td><td class="right num">'+fmtNum(it.receivedQty)+'</td><td class="right num">'+fmtNum(pending)+'</td><td class="cell-muted">'+esc(it.remark||"—")+'</td></tr>';
+    var rawPending = num(it.qty,0)-num(it.receivedQty,0);
+    var pending = Math.max(0, rawPending);
+    var overReceived = Math.max(0, -rawPending);
+    var taxable = num(it.qty,0)*num(it.rate,0);
+    var receivedCell = fmtNum(it.receivedQty) + (overReceived>0 ? ' <span class="cell-muted" style="font-size:11px;">(+'+fmtNum(overReceived)+' extra)</span>' : '');
+    return '<tr><td><b>'+esc(it.materialName)+'</b></td><td class="right num">'+fmtNum(it.qty)+'</td><td class="right num">'+fmtCurrency(it.rate)+'</td><td class="right num">'+fmtCurrency(taxable)+'</td><td class="right num">'+fmtNum(it.gstPct)+'%</td><td class="right num">'+fmtCurrency(poItemGstAmount(it))+'</td><td class="right num">'+fmtCurrency(taxable+poItemGstAmount(it))+'</td><td class="right num">'+receivedCell+'</td><td class="right num">'+fmtNum(pending)+'</td><td class="cell-muted">'+esc(it.remark||"—")+'</td></tr>';
   }).join("");
   var vendor = state.vendors.filter(function(v){return v.id===po.vendorId;})[0];
+  var grandTotal = poItemsGrandTotal(po);
+  var bills = poBills(po.id).slice().sort(function(a,b){return (b.billDate||"").localeCompare(a.billDate||"");});
+  var billedTotal = poBilledTotal(po.id);
+  var billRows = bills.map(function(b){
+    return '<tr><td>'+fmtDate(b.billDate)+'</td><td class="cell-muted">'+esc(b.billNumber||"—")+'</td><td class="right num">'+fmtCurrency(b.amount)+'</td><td class="cell-muted">'+esc(b.remark||"—")+'</td><td class="right"><button class="iconbtn danger" title="Delete" data-action="delete-bill" data-id="'+b.id+'">&#128465;</button></td></tr>';
+  }).join("");
+  var billingSection =
+    '<div class="card-pad" style="background:var(--surface-2);border-radius:9px;margin-top:16px;">' +
+      '<div class="section-head" style="margin-bottom:10px;"><h2 style="font-size:14px;">Vendor Bills (Tax Invoices)</h2>' +
+        '<button type="button" class="btn btn-ghost btn-sm" data-action="view-vendor-ledger" data-id="'+esc(po.vendorId)+'">View Vendor Ledger &rarr;</button>' +
+      '</div>' +
+      '<div class="cell-muted" style="font-size:12.5px;margin-bottom:10px;">Enter the vendor\'s actual tax invoice here (its own date, number and amount) — this is what counts toward what you owe, not the PO total. PO Grand Total: <b class="num">'+fmtCurrency(grandTotal)+'</b> &middot; Billed so far: <b class="num">'+fmtCurrency(billedTotal)+'</b></div>' +
+      (bills.length ?
+        '<div class="table-wrap"><table><thead><tr><th>Invoice Date</th><th>Invoice No.</th><th class="right">Amount</th><th>Remark</th><th></th></tr></thead><tbody>'+billRows+'</tbody></table></div>'
+        : '<div class="cell-muted" style="font-size:12.5px;margin-bottom:10px;">No bill recorded yet for this order.</div>') +
+      '<form novalidate data-form="add-bill" data-id="'+po.id+'" data-vendor-id="'+esc(po.vendorId)+'" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:10px;align-items:end;margin-top:14px;">' +
+        '<div class="field"><label for="billDate">Invoice (Bill) Date</label><input id="billDate" name="billDate" type="date" value="'+todayISO()+'"></div>' +
+        '<div class="field"><label for="billNumber">Invoice / Bill No.</label><input id="billNumber" name="billNumber" placeholder="e.g. INV-1042"></div>' +
+        '<div class="field"><label for="billAmount">Amount</label><input id="billAmount" name="amount" type="number" min="0" step="any" placeholder="'+fmtNum(grandTotal)+'"></div>' +
+        '<div class="field"><label for="billRemark">Remark</label><input id="billRemark" name="remark" placeholder="Optional"></div>' +
+        '<button type="submit" class="btn btn-primary btn-sm">+ Add Bill</button>' +
+      '</form>' +
+    '</div>';
   return '<div class="stat-line"><span>Vendor</span><b>'+esc(vendorName(po.vendorId))+'</b></div>' +
     '<div class="stat-line"><span>Date</span><b>'+fmtDate(po.date)+'</b></div>' +
     '<div class="stat-line"><span>Status</span>'+statusBadge(poStatusTone(po.status),po.status)+'</div>' +
-    '<div class="table-wrap" style="margin-top:12px;"><table><thead><tr><th>Material</th><th class="right">Ordered</th><th class="right">Rate</th><th class="right">Total</th><th class="right">Received</th><th class="right">Pending</th><th>Remarks</th></tr></thead><tbody>'+itemRows+
-    '<tr style="font-weight:700;"><td colspan="3" class="right">Order Total</td><td class="right num">'+fmtCurrency(poItemsTotal(po))+'</td><td colspan="3"></td></tr></tbody></table></div>' +
+    '<div class="table-wrap" style="margin-top:12px;"><table><thead><tr><th>Material</th><th class="right">Ordered</th><th class="right">Rate</th><th class="right">Taxable</th><th class="right">GST %</th><th class="right">GST Amt</th><th class="right">Total</th><th class="right">Received</th><th class="right">Pending</th><th>Remarks</th></tr></thead><tbody>'+itemRows+
+    '<tr style="font-weight:700;"><td colspan="3" class="right">Subtotal / GST / Grand Total</td><td class="right num">'+fmtCurrency(poItemsTotal(po))+'</td><td></td><td class="right num">'+fmtCurrency(poItemsGstTotal(po))+'</td><td class="right num">'+fmtCurrency(poItemsGrandTotal(po))+'</td><td colspan="3"></td></tr></tbody></table></div>' +
+    billingSection +
     '<div style="margin-top:14px;"><div class="cell-muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">Remarks / Terms &amp; Conditions</div>' +
       '<div class="card-pad" style="background:var(--surface-2);border-radius:9px;white-space:pre-wrap;font-size:13px;">'+esc(po.terms||"No remarks recorded for this order.")+'</div></div>' +
     '<div style="display:flex;gap:9px;flex-wrap:wrap;margin-top:16px;">' +
@@ -1742,6 +2008,50 @@ function poViewBody(poId){
       (po.status!=="Received" && po.status!=="Cancelled"? '<button class="btn btn-primary btn-sm" data-action="quick-receive-po" data-id="'+po.id+'">Go to Receive Material</button>' : '') +
     '</div>' +
     '<div class="cell-muted" style="margin-top:10px;font-size:12px;">Email opens your device\'s email app pre-filled with the vendor\'s address and order details — the PDF downloads at the same time, so attach it before you hit send (browsers can\'t attach files to an email automatically).</div>';
+}
+function vendorLedgerBody(vendorId){
+  var vendor = vendorById(vendorId); if(!vendor) return emptyState("Vendor not found.");
+  var summary = vendorPayableSummary(vendorId);
+  var entries = vendorLedgerEntries(vendorId);
+  var rows = entries.slice().reverse().map(function(e){
+    var refCell = esc(e.ref) + (e.remark? (' <span class="cell-muted">— '+esc(e.remark)+'</span>') : "");
+    var delAction = e.kind==="bill" ? "delete-bill" : "delete-payment";
+    return '<tr><td>'+fmtDate(e.date)+'</td><td>'+refCell+'</td>' +
+      '<td class="right num">'+(e.debit>0?fmtCurrency(e.debit):'<span class="cell-muted">—</span>')+'</td>' +
+      '<td class="right num">'+(e.credit>0?fmtCurrency(e.credit):'<span class="cell-muted">—</span>')+'</td>' +
+      '<td class="right num"><b>'+fmtCurrency(e.balance)+'</b></td>' +
+      '<td class="right"><button class="iconbtn danger" title="Delete" data-action="'+delAction+'" data-id="'+e.id+'">&#128465;</button></td></tr>';
+  }).join("");
+  return '<div class="grid" style="grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:14px;">' +
+      statTile("Credit Period", fmtNum(vendor.creditPeriodDays!==undefined?vendor.creditPeriodDays:30)+" days") +
+      statTile("Balance Due", fmtCurrency(summary.balanceDue)) +
+    '</div>' +
+    '<div class="stat-line" style="margin-bottom:14px;"><span>Status</span>'+statusBadge(summary.tone,summary.label)+(summary.dueDate?(' <span class="cell-muted" style="margin-left:8px;">Due '+fmtDate(summary.dueDate)+(summary.daysOverdue>0?(' &middot; '+summary.daysOverdue+' day'+(summary.daysOverdue===1?"":"s")+' overdue'):(summary.daysOverdue<0?(' &middot; due in '+(-summary.daysOverdue)+' day'+(summary.daysOverdue===-1?"":"s")):''))+'</span>'):'')+'</div>' +
+    '<h4 style="margin-bottom:8px;font-size:13px;">Ledger — Bills (debit) &amp; Payments (credit)</h4>' +
+    (entries.length ?
+      '<div class="table-wrap"><table><thead><tr><th>Date</th><th>Reference</th><th class="right">Debit</th><th class="right">Credit</th><th class="right">Balance</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'
+      : emptyState("No bills or payments recorded for this vendor yet.")) +
+    '<div class="grid" style="grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;">' +
+      '<div class="card-pad" style="background:var(--surface-2);border-radius:9px;">' +
+        '<div class="cell-muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">+ Add Bill (Tax Invoice)</div>' +
+        '<form novalidate data-form="add-bill" data-id="" data-vendor-id="'+esc(vendor.id)+'" style="display:grid;gap:8px;">' +
+          '<div class="field"><label for="lgBillDate">Invoice (Bill) Date</label><input id="lgBillDate" name="billDate" type="date" value="'+todayISO()+'"></div>' +
+          '<div class="field"><label for="lgBillNumber">Invoice / Bill No.</label><input id="lgBillNumber" name="billNumber" placeholder="e.g. INV-1042"></div>' +
+          '<div class="field"><label for="lgBillAmount">Amount</label><input id="lgBillAmount" name="amount" type="number" min="0" step="any" placeholder="0.00"></div>' +
+          '<div class="field"><label for="lgBillRemark">Remark</label><input id="lgBillRemark" name="remark" placeholder="Optional — e.g. related PO, freight"></div>' +
+          '<button type="submit" class="btn btn-primary btn-sm">+ Add Bill</button>' +
+        '</form>' +
+      '</div>' +
+      '<div class="card-pad" style="background:var(--surface-2);border-radius:9px;">' +
+        '<div class="cell-muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">+ Record Payment</div>' +
+        '<form novalidate data-form="record-payment" data-id="'+esc(vendor.id)+'" style="display:grid;gap:8px;">' +
+          '<div class="field"><label for="payDate">Date</label><input id="payDate" name="date" type="date" value="'+todayISO()+'"></div>' +
+          '<div class="field"><label for="payAmount">Amount</label><input id="payAmount" name="amount" type="number" min="0" step="any" placeholder="'+fmtNum(summary.balanceDue)+'"></div>' +
+          '<div class="field"><label for="payRemark">Remark</label><input id="payRemark" name="remark" placeholder="e.g. NEFT ref, cheque no."></div>' +
+          '<button type="submit" class="btn btn-primary btn-sm" '+(summary.balanceDue<=0?"disabled":"")+'>+ Record Payment</button>' +
+        '</form>' +
+      '</div>' +
+    '</div>';
 }
 
 /* ============================= event handling ============================= */
@@ -1756,6 +2066,12 @@ function bindGlobalHandlers(){
     }
     var action = t.getAttribute("data-action");
     var id = t.getAttribute("data-id");
+    // If the resolved action is only the modal-backdrop itself (found by bubbling past a
+    // plain element with no data-action of its own, e.g. a bare submit button inside a
+    // modal's form), but the actual click originated inside a protected [data-stop] zone
+    // (the modal card), it's not a genuine "click outside to close" — ignore it so the
+    // form's own submit handler gets a chance to run instead of the modal closing under it.
+    if(action==="modal-backdrop" && e.target.closest("[data-stop]")) return;
     switch(action){
       case "toggle-nav": state.ui.navOpen = !state.ui.navOpen; render(); break;
       case "logout": doLogout(); break;
@@ -1773,6 +2089,9 @@ function bindGlobalHandlers(){
       case "edit-vendor": state.ui.vendors.editingId = id; render(); scrollTopOfContent(); break;
       case "cancel-edit-vendor": state.ui.vendors.editingId = null; render(); break;
       case "delete-vendor": deleteVendor(id); break;
+      case "delete-payment": deletePayment(id); break;
+      case "delete-bill": deleteBill(id); break;
+      case "view-vendor-ledger": state.ui.modal = {type:"vendor-ledger", id:id}; render(); break;
 
       case "view-ledger": state.ui.modal = {type:"ledger", id:id}; render(); break;
       case "view-po": state.ui.modal = {type:"po-view", id:id}; render(); break;
@@ -1785,7 +2104,7 @@ function bindGlobalHandlers(){
       case "goto-po-for":
         state.page="pos"; ensureBuilder(id); render(); break;
 
-      case "po-add-row": state.ui.pos.builder.items.push({materialId:"",qty:"",rate:"",remark:""}); render(); break;
+      case "po-add-row": state.ui.pos.builder.items.push({materialId:"",qty:"",rate:"",gstPct:18,remark:""}); render(); break;
       case "po-remove-row":
         var idx = parseInt(t.getAttribute("data-idx"),10);
         if(state.ui.pos.builder.items.length>1){ state.ui.pos.builder.items.splice(idx,1); render(); }
@@ -1826,7 +2145,7 @@ function bindGlobalHandlers(){
       state.ui.materials.editingId = null; render();
     } else if(kind==="vendor"){
       var vid = form.getAttribute("data-id")||null;
-      var vpayload = { name:readVal(form,"name").trim(), contact:readVal(form,"contact").trim(), phone:readVal(form,"phone").trim(), email:readVal(form,"email").trim(), address:readVal(form,"address").trim(), gstin:readVal(form,"gstin").trim().toUpperCase() };
+      var vpayload = { name:readVal(form,"name").trim(), contact:readVal(form,"contact").trim(), phone:readVal(form,"phone").trim(), email:readVal(form,"email").trim(), address:readVal(form,"address").trim(), gstin:readVal(form,"gstin").trim().toUpperCase(), creditPeriodDays:num(readVal(form,"creditPeriodDays"),30) };
       if(!vpayload.name){ toast("Vendor name is required.","danger"); return; }
       upsertVendor(vid||null, vpayload);
       state.ui.vendors.editingId = null; render();
@@ -1846,7 +2165,14 @@ function bindGlobalHandlers(){
       else { adjustStock(mId, qtyVal, todayISO(), remarkVal); }
       state.ui.inventory.entry = {materialId:"",qty:"",rate:"",remark:"",poId:""}; render();
     } else if(kind==="settings-general"){
-      saveSettings({ companyName:readEntry("setCompany").trim()||state.settings.companyName, currency:readEntry("setCurrency").trim()||state.settings.currency, lowStockThresholdPct:num(readEntry("setLowPct"),50), partialStockThresholdPct:num(readEntry("setPartialPct"),60), poPrefix:readEntry("setPoPrefix").trim()||state.settings.poPrefix });
+      saveSettings({ companyName:readEntry("setCompany").trim()||state.settings.companyName, currency:readEntry("setCurrency").trim()||state.settings.currency, lowStockThresholdPct:num(readEntry("setLowPct"),50), partialStockThresholdPct:num(readEntry("setPartialPct"),60), mailReminderDays:num(readEntry("setMailDays"),21), supplyStopDays:num(readEntry("setStopDays"),60), poPrefix:readEntry("setPoPrefix").trim()||state.settings.poPrefix });
+    } else if(kind==="add-bill"){
+      var billPoId = form.getAttribute("data-id")||"";
+      var billVendorId = form.getAttribute("data-vendor-id")||"";
+      addBill(billPoId, billVendorId, readVal(form,"billNumber"), readVal(form,"billDate")||todayISO(), num(readVal(form,"amount"),0), readVal(form,"remark")).then(function(ok){ if(ok) render(); });
+    } else if(kind==="record-payment"){
+      var payVendorId = form.getAttribute("data-id");
+      recordPayment(payVendorId, num(readVal(form,"amount"),0), readVal(form,"date")||todayISO(), readVal(form,"remark")).then(function(ok){ if(ok) render(); });
     } else if(kind==="add-list-item"){
       var key2 = form.getAttribute("data-key");
       var input = document.getElementById("new_"+key2);
@@ -1918,6 +2244,7 @@ function bindGlobalHandlers(){
       if(mm && !state.ui.pos.builder.items[idx].rate) state.ui.pos.builder.items[idx].rate = mm.purchaseRate;
       render();
     }
+    if(el.classList && el.classList.contains("po-item-gst")){ updatePoLine(el); return; }
   };
 }
 function readVal(form,name){ var el = form.querySelector('[name="'+name+'"]'); return el? el.value : ""; }
@@ -1926,23 +2253,29 @@ function scrollTopOfContent(){ var c=document.getElementById("content"); if(c) c
 function updatePoLine(el){
   var idx = parseInt(el.getAttribute("data-idx"),10);
   var item = state.ui.pos.builder.items[idx]; if(!item) return;
-  if(el.classList.contains("po-item-qty")) item.qty = el.value; else item.rate = el.value;
-  var lineTotal = num(item.qty,0)*num(item.rate,0);
+  if(el.classList.contains("po-item-qty")) item.qty = el.value;
+  else if(el.classList.contains("po-item-rate")) item.rate = el.value;
+  else if(el.classList.contains("po-item-gst")) item.gstPct = el.value;
+  var taxable = num(item.qty,0)*num(item.rate,0);
+  var lineTotal = taxable + taxable*num(item.gstPct,0)/100;
   var cell = document.getElementById("poLineTotal_"+idx); if(cell) cell.textContent = fmtCurrency(lineTotal);
-  var grand = state.ui.pos.builder.items.reduce(function(s,it){return s+num(it.qty,0)*num(it.rate,0);},0);
-  var gEl = document.getElementById("poGrandTotal"); if(gEl) gEl.textContent = fmtCurrency(grand);
+  var totals = poBuilderTotals(state.ui.pos.builder.items);
+  var sEl = document.getElementById("poSubtotal"); if(sEl) sEl.textContent = fmtCurrency(totals.subtotal);
+  var gtEl = document.getElementById("poGstTotal"); if(gtEl) gtEl.textContent = fmtCurrency(totals.gst);
+  var gEl = document.getElementById("poGrandTotal"); if(gEl) gEl.textContent = fmtCurrency(totals.grand);
 }
 function submitPO(){
   var b = state.ui.pos.builder;
   if(!b.vendorId){ toast("Select a vendor.","danger"); return; }
   var items = b.items.filter(function(it){return it.materialId && num(it.qty,0)>0;}).map(function(it){
     var m = materialById(it.materialId);
-    return {materialId:it.materialId, materialName:m?m.name:"", qty:num(it.qty,0), rate:num(it.rate,0), receivedQty:0, remark:(it.remark||"").trim()};
+    return {materialId:it.materialId, materialName:m?m.name:"", qty:num(it.qty,0), rate:num(it.rate,0), gstPct:num(it.gstPct,18), receivedQty:0, remark:(it.remark||"").trim()};
   });
   if(!items.length){ toast("Add at least one line item with a quantity.","danger"); return; }
   var terms = (b.terms||"").trim();
   if(!terms){ toast("Remarks / Terms & Conditions is required before creating the order.","danger"); return; }
-  var po = {poNumber: nextPoNumber(), vendorId:b.vendorId, date: b.date||todayISO(), items: items, status:"Placed", terms: terms};
+  var poDate = b.date||todayISO();
+  var po = {poNumber: nextPoNumber(), vendorId:b.vendorId, date: poDate, items: items, status:"Placed", terms: terms};
   savePO(po).then(function(saved){ state.ui.pos.builder=null; state.ui.modal={type:"po-view", id:saved.id}; render(); });
 }
 
