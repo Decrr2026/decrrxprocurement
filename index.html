@@ -316,6 +316,7 @@ var PAGES = [
   {id:"dashboard", label:"Dashboard", icon:"&#9635;"},
   {id:"materials", label:"Materials", icon:"&#128736;"},
   {id:"vendors", label:"Vendors", icon:"&#127970;"},
+  {id:"bills", label:"Vendor Bills", icon:"&#129534;"},
   {id:"pos", label:"Purchase Orders", icon:"&#128196;"},
   {id:"receive", label:"Receive Material", icon:"&#8615;"},
   {id:"issue", label:"Issue Material", icon:"&#8613;"},
@@ -367,13 +368,15 @@ var state = {
   bills: [],
   settings: { companyName:"DECRR Interio", companyTagline:"Procurement & Inventory System", currency:"₹", lowStockThresholdPct:50, partialStockThresholdPct:60, mailReminderDays:21, supplyStopDays:60, materialTypes: DEFAULT_MATERIAL_TYPES.slice(), uomList: DEFAULT_UOM.slice(), poPrefix:"PO-2026-", sites: ["Site 1 - Tower A","Site 2 - Tower B","Central Warehouse"] },
   ui: {
-    materials: { editingId:null, search:"", typeFilter:"All" },
-    vendors: { editingId:null, search:"" },
+    materials: { editingId:null, search:"", typeFilter:"All", vendorFilter:"All" },
+    vendors: { editingId:null, search:"", duesFilter:"All" },
+    bills: { editingId:null, search:"", tab:"bills" },
     pos: { search:"", statusFilter:"All", vendorFilter:"All", builder:null, viewingId:null },
     inventory: { search:"", statusFilter:"All", tab:"received", entry:{materialId:"", qty:"", rate:"", remark:"", poId:""}, ledgerFor:null },
     dashboard: { search:"", statusFilter:"All", typeFilter:"All", vendorFilter:"All", siteFilter:"All", stockFilter:"All" },
     receive: { materialId:"", poId:"", qty:"", rate:"", remark:"", date: todayISO() },
     issue: { materialId:"", qty:"", siteId:"", remark:"", date: todayISO() },
+    issueLog: { search:"", siteFilter:"All" },
     reports: { tab:"valuation", ledgerMaterialId:"", siteFilter:"All" },
     payment: { amount:"", date: todayISO(), remark:"" },
     modal: null
@@ -546,7 +549,7 @@ function vendorBalanceDue(vendorId){ return round2(vendorTotalBilled(vendorId) -
 function vendorLedgerEntries(vendorId){
   var entries = [];
   vendorBills(vendorId).forEach(function(b){
-    entries.push({date:b.date||b.billDate, kind:"bill", id:b.id, ref:(b.billNumber?("Tax Invoice "+b.billNumber):"Bill"), poId:b.poId||"", remark:b.remark||"", debit:num(b.amount,0), credit:0, createdAt:b.createdAt||""});
+    entries.push({date:b.billDate, kind:"bill", id:b.id, ref:(b.billNumber?("Tax Invoice "+b.billNumber):"Bill"), poId:b.poId||"", remark:b.remark||"", debit:num(b.amount,0), credit:0, createdAt:b.createdAt||""});
   });
   vendorPayments(vendorId).forEach(function(p){
     entries.push({date:p.date, kind:"payment", id:p.id, ref:"Payment", poId:"", remark:p.remark||"", debit:0, credit:num(p.amount,0), createdAt:p.createdAt||""});
@@ -907,6 +910,27 @@ function deleteVendor(id){
   if(inUse){ toast("Can't delete — vendor has purchase orders on record.","danger"); return; }
   if(!confirmAction('Delete vendor "'+v.name+'"?')) return;
   persist("vendors", id, null, true).then(function(){ toast("Vendor deleted."); if(!state.db) render(); });
+}
+// Full add-or-edit mutations for the dedicated Vendor Bills page (the quick-add mini-forms inside
+// a PO's popup and the Vendor Ledger call addBill()/recordPayment() below instead, which only ever
+// create a new record — editing an existing bill or payment happens here).
+function upsertBill(id, payload){
+  if(!(num(payload.amount,0)>0)){ toast("Enter a bill amount greater than 0.","danger"); return; }
+  if(!payload.vendorId){ toast("Select a vendor for this bill.","danger"); return; }
+  var isNew = !id;
+  var finalId = id || uid("bill");
+  var existing = state.bills.filter(function(b){return b.id===finalId;})[0] || {};
+  var data = Object.assign({id:finalId}, existing, payload);
+  persist("bills", finalId, data).then(function(){ toast(isNew?"Bill added.":"Bill updated."); if(!state.db) render(); });
+}
+function upsertPayment(id, payload){
+  if(!(num(payload.amount,0)>0)){ toast("Enter a payment amount greater than 0.","danger"); return; }
+  if(!payload.vendorId){ toast("Select a vendor for this payment.","danger"); return; }
+  var isNew = !id;
+  var finalId = id || uid("pay");
+  var existing = state.payments.filter(function(p){return p.id===finalId;})[0] || {};
+  var data = Object.assign({id:finalId}, existing, payload);
+  persist("payments", finalId, data).then(function(){ toast(isNew?"Payment added.":"Payment updated."); if(!state.db) render(); });
 }
 function createTransaction(t){
   var data = Object.assign({id:uid("tx"), createdAt:new Date().toISOString()}, t);
@@ -1296,6 +1320,7 @@ function renderPage(id){
     case "dashboard": return pageDashboard();
     case "materials": return pageMaterials();
     case "vendors": return pageVendors();
+    case "bills": return pageBills();
     case "pos": return pagePOs();
     case "receive": return pageReceive();
     case "issue": return pageIssue();
@@ -1436,6 +1461,7 @@ function pageMaterials(){
   var ui = state.ui.materials;
   var editing = ui.editingId ? materialById(ui.editingId) : null;
   var typeOpts = ["All"].concat(state.settings.materialTypes);
+  var vendorOpts = [["All","All Vendors"]].concat(state.vendors.map(function(v){return [v.id,v.name];}));
   return '<div class="card card-pad">' +
     '<div class="section-head"><div><h2>'+(editing?"Edit Material":"Add New Material")+'</h2><div class="hint">Add and manage all materials used in your projects.</div></div></div>' +
     materialFormHtml(editing) +
@@ -1445,6 +1471,7 @@ function pageMaterials(){
     '<div class="toolbar">' +
       '<div class="search-box"><span class="ic">&#128269;</span><input id="matSearch" placeholder="Search material, type or description…" value="'+esc(ui.search)+'"></div>' +
       '<select id="matTypeFilter">'+typeOpts.map(function(t){return '<option '+(ui.typeFilter===t?"selected":"")+'>'+esc(t)+'</option>';}).join("")+'</select>' +
+      '<select id="matVendorFilter">'+vendorOpts.map(function(v){return '<option value="'+esc(v[0])+'" '+(ui.vendorFilter===v[0]?"selected":"")+'>'+esc(v[1])+'</option>';}).join("")+'</select>' +
     '</div>' +
     '<div id="materialListContainer" style="margin-top:14px;">'+renderMaterialList()+'</div>' +
   '</div>';
@@ -1455,7 +1482,8 @@ function renderMaterialList(){
     var q = ui.search.toLowerCase();
     var matchSearch = !q || m.name.toLowerCase().indexOf(q)>-1 || m.type.toLowerCase().indexOf(q)>-1 || (m.description||"").toLowerCase().indexOf(q)>-1;
     var matchType = ui.typeFilter==="All" || m.type===ui.typeFilter;
-    return matchSearch && matchType;
+    var matchVendor = !ui.vendorFilter || ui.vendorFilter==="All" || m.preferredVendorId===ui.vendorFilter;
+    return matchSearch && matchType && matchVendor;
   });
   if(!rows.length) return emptyState("No materials found.","&#128230;");
   var body = rows.map(function(m,i){
@@ -1466,6 +1494,7 @@ function renderMaterialList(){
       '<td><span class="type-chip">'+esc(m.type)+'</span></td>' +
       '<td class="cell-muted">'+esc(m.description||"—")+'</td>' +
       '<td>'+esc(m.uom)+'</td>' +
+      '<td class="cell-muted">'+(m.preferredVendorId?esc(vendorName(m.preferredVendorId)):"—")+'</td>' +
       '<td class="right num">'+fmtNum(m.siteRequirement)+'</td>' +
       '<td class="right num">'+fmtCurrency(m.purchaseRate)+'</td>' +
       '<td class="right num">'+fmtNum(stock.closing)+'</td>' +
@@ -1475,7 +1504,7 @@ function renderMaterialList(){
       '</div></td>' +
     '</tr>';
   }).join("");
-  return '<div class="table-wrap"><table><thead><tr><th>S.No</th><th>Material Name</th><th>Type</th><th>Description</th><th>UOM</th><th class="right">Site Requirement</th><th class="right">Purchase Rate</th><th class="right">In Stock</th><th></th></tr></thead><tbody>'+body+'</tbody></table></div>' +
+  return '<div class="table-wrap"><table><thead><tr><th>S.No</th><th>Material Name</th><th>Type</th><th>Description</th><th>UOM</th><th>Preferred Vendor</th><th class="right">Site Requirement</th><th class="right">Purchase Rate</th><th class="right">In Stock</th><th></th></tr></thead><tbody>'+body+'</tbody></table></div>' +
     '<div class="cell-muted" style="margin-top:10px;">Showing '+rows.length+' of '+state.materials.length+' materials</div>';
 }
 
@@ -1501,13 +1530,17 @@ function vendorFormHtml(editing){
 function pageVendors(){
   var ui = state.ui.vendors;
   var editing = ui.editingId ? state.vendors.filter(function(v){return v.id===ui.editingId;})[0] : null;
+  var duesOpts = ["All","Has Balance Due","Paid Up","Supply Continue","Overdue — Please Mail","Badly Overdue — Supply Stop"];
   return '<div class="card card-pad">' +
     '<div class="section-head"><div><h2>'+(editing?"Edit Vendor":"Add New Vendor")+'</h2><div class="hint">Manage suppliers you place purchase orders with.</div></div></div>' +
     vendorFormHtml(editing) +
   '</div>' +
   '<div class="card card-pad" style="margin-top:16px;">' +
     '<div class="section-head"><h2>Vendor List</h2></div>' +
-    '<div class="toolbar"><div class="search-box"><span class="ic">&#128269;</span><input id="venSearch" placeholder="Search vendor, contact or GSTIN…" value="'+esc(ui.search)+'"></div></div>' +
+    '<div class="toolbar">' +
+      '<div class="search-box"><span class="ic">&#128269;</span><input id="venSearch" placeholder="Search vendor, contact or GSTIN…" value="'+esc(ui.search)+'"></div>' +
+      '<select id="venDuesFilter">'+duesOpts.map(function(d){return '<option value="'+esc(d)+'" '+(ui.duesFilter===d?"selected":"")+'>'+esc(d)+'</option>';}).join("")+'</select>' +
+    '</div>' +
     '<div id="vendorListContainer" style="margin-top:14px;">'+renderVendorList()+'</div>' +
   '</div>';
 }
@@ -1515,7 +1548,11 @@ function renderVendorList(){
   var ui = state.ui.vendors;
   var rows = state.vendors.filter(function(v){
     var q = ui.search.toLowerCase();
-    return !q || v.name.toLowerCase().indexOf(q)>-1 || (v.contact||"").toLowerCase().indexOf(q)>-1 || (v.gstin||"").toLowerCase().indexOf(q)>-1;
+    var matchSearch = !q || v.name.toLowerCase().indexOf(q)>-1 || (v.contact||"").toLowerCase().indexOf(q)>-1 || (v.gstin||"").toLowerCase().indexOf(q)>-1;
+    var pay = vendorPayableSummary(v.id);
+    var df = ui.duesFilter||"All";
+    var matchDues = df==="All" || (df==="Has Balance Due"? pay.balanceDue>0 : pay.label===df);
+    return matchSearch && matchDues;
   });
   if(!rows.length) return emptyState("No vendors found.","&#127970;");
   var body = rows.map(function(v,i){
@@ -1529,6 +1566,7 @@ function renderVendorList(){
       '<td class="center num">'+fmtNum(v.creditPeriodDays!==undefined?v.creditPeriodDays:30)+' days</td>' +
       '<td class="center">'+poCount+'</td>' +
       '<td class="right num">'+(pay.balanceDue>0?('<b>'+fmtCurrency(pay.balanceDue)+'</b>'):('<span class="cell-muted">'+fmtCurrency(0)+'</span>'))+'</td>' +
+      '<td class="cell-muted">'+(pay.dueDate?fmtDate(pay.dueDate):"—")+'</td>' +
       '<td>'+statusBadge(pay.tone,pay.label)+'</td>' +
       '<td class="right"><div style="display:flex;gap:6px;justify-content:flex-end;">' +
         '<button class="iconbtn accent" title="View ledger" data-action="view-vendor-ledger" data-id="'+v.id+'">&#128065;</button>' +
@@ -1537,7 +1575,117 @@ function renderVendorList(){
       '</div></td>' +
     '</tr>';
   }).join("");
-  return '<div class="table-wrap"><table><thead><tr><th>S.No</th><th>Vendor</th><th>Contact</th><th>Phone / Email</th><th class="center">Credit Period</th><th class="center">POs</th><th class="right">Balance Due</th><th>Status</th><th></th></tr></thead><tbody>'+body+'</tbody></table></div>';
+  return '<div class="table-wrap"><table><thead><tr><th>S.No</th><th>Vendor</th><th>Contact</th><th>Phone / Email</th><th class="center">Credit Period</th><th class="center">POs</th><th class="right">Balance Due</th><th>Due Date</th><th>Status</th><th></th></tr></thead><tbody>'+body+'</tbody></table></div>';
+}
+
+/* ============================= PAGE: vendor bills & payments ============================= */
+// A dedicated, easy-to-find page for every vendor Bill (Tax Invoice) and Payment across all
+// vendors — full add AND edit here, not just the quick-add-only mini-forms inside a PO popup
+// or the Vendor Ledger (those remain as fast shortcuts; this page is the complete record).
+function vendorOptionsHtml(selectedId){
+  return state.vendors.map(function(v){ return '<option value="'+v.id+'" '+(selectedId===v.id?"selected":"")+'>'+esc(v.name)+'</option>'; }).join("");
+}
+function poOptionsHtml(selectedId){
+  var opts = '<option value="" '+(!selectedId?"selected":"")+'>No related PO</option>';
+  opts += state.purchaseOrders.map(function(p){ return '<option value="'+p.id+'" '+(selectedId===p.id?"selected":"")+'>'+esc(p.poNumber)+' — '+esc(vendorName(p.vendorId))+'</option>'; }).join("");
+  return opts;
+}
+function billFormHtml(editing){
+  var b = editing || {vendorId:"", poId:"", billDate:todayISO(), billNumber:"", amount:"", remark:""};
+  return '<form novalidate data-form="bill-full" data-id="'+(editing?editing.id:"")+'">' +
+    '<div class="form-grid">' +
+      '<div class="field"><label for="bfVendor">Vendor <span class="req">*</span></label><select id="bfVendor" name="vendorId" required><option value="" disabled '+(b.vendorId?"":"selected")+'>Select vendor</option>'+vendorOptionsHtml(b.vendorId)+'</select></div>' +
+      '<div class="field"><label for="bfPo">Related PO (Optional)</label><select id="bfPo" name="poId">'+poOptionsHtml(b.poId)+'</select></div>' +
+      '<div class="field"><label for="bfDate">Invoice (Bill) Date <span class="req">*</span></label><input id="bfDate" name="billDate" type="date" required value="'+esc(b.billDate)+'"></div>' +
+      '<div class="field"><label for="bfNumber">Invoice / Bill No.</label><input id="bfNumber" name="billNumber" placeholder="e.g. INV-1042" value="'+esc(b.billNumber)+'"></div>' +
+      '<div class="field"><label for="bfAmount">Amount <span class="req">*</span></label><input id="bfAmount" name="amount" type="number" min="0" step="any" required placeholder="0.00" value="'+esc(b.amount)+'"></div>' +
+      '<div class="field"><label for="bfRemark">Remark</label><input id="bfRemark" name="remark" placeholder="Optional" value="'+esc(b.remark||"")+'"></div>' +
+    '</div>' +
+    '<div style="display:flex;gap:10px;margin-top:14px;">' +
+      '<button type="submit" class="btn btn-primary">'+(editing?"&#10003; Update Bill":"+ Add Bill")+'</button>' +
+      (editing? '<button type="button" class="btn btn-ghost" data-action="cancel-edit-bill">Cancel</button>' : '<button type="reset" class="btn btn-ghost">Clear</button>') +
+    '</div>' +
+  '</form>';
+}
+function paymentFormHtml(editing){
+  var p = editing || {vendorId:"", date:todayISO(), amount:"", remark:""};
+  return '<form novalidate data-form="payment-full" data-id="'+(editing?editing.id:"")+'">' +
+    '<div class="form-grid">' +
+      '<div class="field"><label for="pfVendor">Vendor <span class="req">*</span></label><select id="pfVendor" name="vendorId" required><option value="" disabled '+(p.vendorId?"":"selected")+'>Select vendor</option>'+vendorOptionsHtml(p.vendorId)+'</select></div>' +
+      '<div class="field"><label for="pfDate">Date <span class="req">*</span></label><input id="pfDate" name="date" type="date" required value="'+esc(p.date)+'"></div>' +
+      '<div class="field"><label for="pfAmount">Amount <span class="req">*</span></label><input id="pfAmount" name="amount" type="number" min="0" step="any" required placeholder="0.00" value="'+esc(p.amount)+'"></div>' +
+      '<div class="field"><label for="pfRemark">Remark</label><input id="pfRemark" name="remark" placeholder="e.g. NEFT ref, cheque no." value="'+esc(p.remark||"")+'"></div>' +
+    '</div>' +
+    '<div style="display:flex;gap:10px;margin-top:14px;">' +
+      '<button type="submit" class="btn btn-primary">'+(editing?"&#10003; Update Payment":"+ Record Payment")+'</button>' +
+      (editing? '<button type="button" class="btn btn-ghost" data-action="cancel-edit-payment">Cancel</button>' : '<button type="reset" class="btn btn-ghost">Clear</button>') +
+    '</div>' +
+  '</form>';
+}
+function pageBills(){
+  var ui = state.ui.bills;
+  var tabs = [["bills","Bills (Tax Invoices)"],["payments","Payments"]];
+  var tabBar = '<div class="pill-tabs">'+tabs.map(function(t){return '<button class="pill-tab'+(ui.tab===t[0]?" active":"")+'" data-action="bills-tab" data-tab="'+t[0]+'">'+t[1]+'</button>';}).join("")+'</div>';
+  var isBills = ui.tab!=="payments";
+  var editingBill = isBills && ui.editingId ? state.bills.filter(function(b){return b.id===ui.editingId;})[0] : null;
+  var editingPayment = !isBills && ui.editingId ? state.payments.filter(function(p){return p.id===ui.editingId;})[0] : null;
+  return '<div class="card card-pad">' +
+    '<div class="section-head"><div><h2>Vendor Bills &amp; Payments</h2><div class="hint">Every tax invoice you owe and every payment you\'ve made, across all vendors — add, edit or remove any of them here.</div></div></div>' +
+    tabBar +
+    '<div style="margin-top:16px;">' + (isBills ? billFormHtml(editingBill) : paymentFormHtml(editingPayment)) + '</div>' +
+  '</div>' +
+  '<div class="card card-pad" style="margin-top:16px;">' +
+    '<div class="section-head"><h2>'+(isBills?"All Bills":"All Payments")+'</h2></div>' +
+    '<div class="toolbar"><div class="search-box"><span class="ic">&#128269;</span><input id="billsSearch" placeholder="Search by vendor, invoice no. or remark…" value="'+esc(ui.search)+'"></div></div>' +
+    '<div id="billsListContainer" style="margin-top:14px;">'+(isBills?renderBillsList():renderPaymentsList())+'</div>' +
+  '</div>';
+}
+function renderBillsList(){
+  var ui = state.ui.bills;
+  var q = ui.search.toLowerCase();
+  var rows = state.bills.filter(function(b){
+    return !q || vendorName(b.vendorId).toLowerCase().indexOf(q)>-1 || (b.billNumber||"").toLowerCase().indexOf(q)>-1 || (b.remark||"").toLowerCase().indexOf(q)>-1;
+  }).slice().sort(function(a,b){return (b.billDate||"").localeCompare(a.billDate||"");});
+  if(!rows.length) return emptyState("No bills recorded yet.","&#129534;");
+  var body = rows.map(function(b,i){
+    var po = state.purchaseOrders.filter(function(p){return p.id===b.poId;})[0];
+    return '<tr>' +
+      '<td class="cell-muted">'+(i+1)+'</td>' +
+      '<td>'+fmtDate(b.billDate)+'</td>' +
+      '<td><b>'+esc(vendorName(b.vendorId))+'</b></td>' +
+      '<td class="cell-muted">'+esc(b.billNumber||"—")+'</td>' +
+      '<td class="right num"><b>'+fmtCurrency(b.amount)+'</b></td>' +
+      '<td class="cell-muted">'+(po?esc(po.poNumber):"—")+'</td>' +
+      '<td class="cell-muted">'+esc(b.remark||"—")+'</td>' +
+      '<td class="right"><div style="display:flex;gap:6px;justify-content:flex-end;">' +
+        '<button class="iconbtn" title="Edit" data-action="edit-bill" data-id="'+b.id+'">&#9998;</button>' +
+        '<button class="iconbtn danger" title="Delete" data-action="delete-bill" data-id="'+b.id+'">&#128465;</button>' +
+      '</div></td>' +
+    '</tr>';
+  }).join("");
+  return '<div class="table-wrap"><table><thead><tr><th>S.No</th><th>Invoice Date</th><th>Vendor</th><th>Invoice No.</th><th class="right">Amount</th><th>Related PO</th><th>Remark</th><th></th></tr></thead><tbody>'+body+'</tbody></table></div>';
+}
+function renderPaymentsList(){
+  var ui = state.ui.bills;
+  var q = ui.search.toLowerCase();
+  var rows = state.payments.filter(function(p){
+    return !q || vendorName(p.vendorId).toLowerCase().indexOf(q)>-1 || (p.remark||"").toLowerCase().indexOf(q)>-1;
+  }).slice().sort(function(a,b){return (b.date||"").localeCompare(a.date||"");});
+  if(!rows.length) return emptyState("No payments recorded yet.","&#128179;");
+  var body = rows.map(function(p,i){
+    return '<tr>' +
+      '<td class="cell-muted">'+(i+1)+'</td>' +
+      '<td>'+fmtDate(p.date)+'</td>' +
+      '<td><b>'+esc(vendorName(p.vendorId))+'</b></td>' +
+      '<td class="right num"><b>'+fmtCurrency(p.amount)+'</b></td>' +
+      '<td class="cell-muted">'+esc(p.remark||"—")+'</td>' +
+      '<td class="right"><div style="display:flex;gap:6px;justify-content:flex-end;">' +
+        '<button class="iconbtn" title="Edit" data-action="edit-payment" data-id="'+p.id+'">&#9998;</button>' +
+        '<button class="iconbtn danger" title="Delete" data-action="delete-payment" data-id="'+p.id+'">&#128465;</button>' +
+      '</div></td>' +
+    '</tr>';
+  }).join("");
+  return '<div class="table-wrap"><table><thead><tr><th>S.No</th><th>Date</th><th>Vendor</th><th class="right">Amount</th><th>Remark</th><th></th></tr></thead><tbody>'+body+'</tbody></table></div>';
 }
 
 /* ============================= PAGE: purchase orders ============================= */
@@ -1715,9 +1863,31 @@ function pageIssue(){
     '</form>' +
   '</div>' +
   '<div class="card card-pad" style="margin-top:16px;">' +
-    '<div class="section-head"><h2>Recent Issues</h2></div>' +
-    renderRecentTxns("issued") +
+    '<div class="section-head"><h2>Issue History</h2><div class="hint">Every material issued out, filterable site / place wise.</div></div>' +
+    '<div class="toolbar">' +
+      '<div class="search-box"><span class="ic">&#128269;</span><input id="issueLogSearch" placeholder="Search material or remark…" value="'+esc(state.ui.issueLog.search)+'"></div>' +
+      '<select id="issueLogSiteFilter">'+["All"].concat(state.settings.sites||[]).map(function(s){return '<option value="'+esc(s)+'" '+(state.ui.issueLog.siteFilter===s?"selected":"")+'>'+(s==="All"?"All Sites / Places":esc(s))+'</option>';}).join("")+'</select>' +
+    '</div>' +
+    '<div id="issueListContainer" style="margin-top:14px;">'+renderIssueList()+'</div>' +
   '</div>';
+}
+function renderIssueList(){
+  var ui = state.ui.issueLog;
+  var q = (ui.search||"").toLowerCase();
+  var rows = state.transactions.filter(function(t){
+    if(t.type!=="issued") return false;
+    var matchSearch = !q || (t.materialName||"").toLowerCase().indexOf(q)>-1 || (t.remark||"").toLowerCase().indexOf(q)>-1;
+    var matchSite = !ui.siteFilter || ui.siteFilter==="All" || t.siteId===ui.siteFilter;
+    return matchSearch && matchSite;
+  }).sort(function(a,b){return (b.createdAt||b.date||"").localeCompare(a.createdAt||a.date||"");});
+  var totalIssued = state.transactions.filter(function(t){return t.type==="issued";}).length;
+  if(!rows.length) return emptyState("No issues match your filters.","&#128203;");
+  var shown = rows.slice(0,50);
+  var body = shown.map(function(t){
+    return '<tr><td>'+fmtDate(t.date)+'</td><td><b>'+esc(t.materialName)+'</b></td><td class="right num">'+fmtNum(t.qty)+'</td><td class="right num">'+fmtCurrency(num(t.qty,0)*num(t.rate,0))+'</td><td class="cell-muted">'+esc(t.siteId||"—")+'</td><td class="cell-muted">'+esc(t.remark||"")+'</td></tr>';
+  }).join("");
+  return '<div class="table-wrap"><table><thead><tr><th>Date</th><th>Material</th><th class="right">Qty</th><th class="right">Value</th><th>Site / Place</th><th>Remark</th></tr></thead><tbody>'+body+'</tbody></table></div>' +
+    '<div class="cell-muted" style="margin-top:10px;">Showing '+shown.length+' of '+rows.length+' matching issues ('+totalIssued+' total)</div>';
 }
 
 /* ============================= PAGE: inventory ============================= */
@@ -2093,6 +2263,12 @@ function bindGlobalHandlers(){
       case "delete-bill": deleteBill(id); break;
       case "view-vendor-ledger": state.ui.modal = {type:"vendor-ledger", id:id}; render(); break;
 
+      case "bills-tab": state.ui.bills.tab = t.getAttribute("data-tab"); state.ui.bills.editingId = null; render(); break;
+      case "edit-bill": state.ui.bills.tab = "bills"; state.ui.bills.editingId = id; render(); scrollTopOfContent(); break;
+      case "cancel-edit-bill": state.ui.bills.editingId = null; render(); break;
+      case "edit-payment": state.ui.bills.tab = "payments"; state.ui.bills.editingId = id; render(); scrollTopOfContent(); break;
+      case "cancel-edit-payment": state.ui.bills.editingId = null; render(); break;
+
       case "view-ledger": state.ui.modal = {type:"ledger", id:id}; render(); break;
       case "view-po": state.ui.modal = {type:"po-view", id:id}; render(); break;
       case "cancel-po": cancelPO(id); break;
@@ -2173,6 +2349,16 @@ function bindGlobalHandlers(){
     } else if(kind==="record-payment"){
       var payVendorId = form.getAttribute("data-id");
       recordPayment(payVendorId, num(readVal(form,"amount"),0), readVal(form,"date")||todayISO(), readVal(form,"remark")).then(function(ok){ if(ok) render(); });
+    } else if(kind==="bill-full"){
+      var fbId = form.getAttribute("data-id")||null;
+      var fbPayload = { vendorId:readVal(form,"vendorId"), poId:readVal(form,"poId")||"", billDate:readVal(form,"billDate")||todayISO(), billNumber:readVal(form,"billNumber").trim(), amount:num(readVal(form,"amount"),0), remark:readVal(form,"remark").trim() };
+      upsertBill(fbId, fbPayload);
+      state.ui.bills.editingId = null; render();
+    } else if(kind==="payment-full"){
+      var fpId = form.getAttribute("data-id")||null;
+      var fpPayload = { vendorId:readVal(form,"vendorId"), date:readVal(form,"date")||todayISO(), amount:num(readVal(form,"amount"),0), remark:readVal(form,"remark").trim() };
+      upsertPayment(fpId, fpPayload);
+      state.ui.bills.editingId = null; render();
     } else if(kind==="add-list-item"){
       var key2 = form.getAttribute("data-key");
       var input = document.getElementById("new_"+key2);
@@ -2193,6 +2379,8 @@ function bindGlobalHandlers(){
       case "venSearch": state.ui.vendors.search = el.value; refreshVendorList(); return;
       case "poSearch": state.ui.pos.search = el.value; refreshPoList(); return;
       case "invSearch": state.ui.inventory.search = el.value; refreshInvList(); return;
+      case "billsSearch": state.ui.bills.search = el.value; refreshBillsList(); return;
+      case "issueLogSearch": state.ui.issueLog.search = el.value; refreshIssueList(); return;
       case "matName": case "matDesc": case "matReq": case "matRate": return; /* no-op, form-only */
       case "po-item-qty": case "po-item-rate": updatePoLine(el); return;
       case "poTerms": ensureBuilder(); state.ui.pos.builder.terms = el.value; return;
@@ -2209,6 +2397,9 @@ function bindGlobalHandlers(){
     var el = e.target;
     switch(el.id){
       case "matTypeFilter": state.ui.materials.typeFilter = el.value; refreshMaterialList(); return;
+      case "matVendorFilter": state.ui.materials.vendorFilter = el.value; refreshMaterialList(); return;
+      case "venDuesFilter": state.ui.vendors.duesFilter = el.value; refreshVendorList(); return;
+      case "issueLogSiteFilter": state.ui.issueLog.siteFilter = el.value; refreshIssueList(); return;
       case "dashStatusFilter": state.ui.dashboard.statusFilter = el.value; refreshContainer("dashboard"); return;
       case "dashTypeFilter": state.ui.dashboard.typeFilter = el.value; refreshContainer("dashboard"); return;
       case "dashVendorFilter": state.ui.dashboard.vendorFilter = el.value; refreshContainer("dashboard"); return;
@@ -2284,6 +2475,8 @@ function refreshMaterialList(){ var c=document.getElementById("materialListConta
 function refreshVendorList(){ var c=document.getElementById("vendorListContainer"); if(c) withFocusPreserved(function(){ c.innerHTML = renderVendorList(); }); }
 function refreshPoList(){ var c=document.getElementById("poListContainer"); if(c) withFocusPreserved(function(){ c.innerHTML = renderPoList(); }); }
 function refreshInvList(){ var c=document.getElementById("invListContainer"); if(c) withFocusPreserved(function(){ c.innerHTML = renderInventoryList(); }); }
+function refreshBillsList(){ var c=document.getElementById("billsListContainer"); if(c) withFocusPreserved(function(){ c.innerHTML = state.ui.bills.tab==="payments" ? renderPaymentsList() : renderBillsList(); }); }
+function refreshIssueList(){ var c=document.getElementById("issueListContainer"); if(c) withFocusPreserved(function(){ c.innerHTML = renderIssueList(); }); }
 function refreshContainer(page){ render(); }
 
 /* ============================= CSV export ============================= */
