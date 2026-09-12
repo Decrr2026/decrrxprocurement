@@ -374,8 +374,8 @@ var state = {
     pos: { search:"", statusFilter:"All", vendorFilter:"All", builder:null, viewingId:null },
     inventory: { search:"", statusFilter:"All", tab:"received", entry:{materialId:"", qty:"", rate:"", remark:"", poId:""}, ledgerFor:null },
     dashboard: { search:"", statusFilter:"All", typeFilter:"All", vendorFilter:"All", siteFilter:"All", stockFilter:"All" },
-    receive: { materialId:"", poId:"", qty:"", rate:"", remark:"", date: todayISO() },
-    issue: { materialId:"", qty:"", siteId:"", remark:"", date: todayISO() },
+    receive: { materialId:"", poId:"", qty:"", rate:"", remark:"", date: todayISO(), editingId:null },
+    issue: { materialId:"", qty:"", siteId:"", remark:"", date: todayISO(), editingId:null },
     issueLog: { search:"", siteFilter:"All" },
     reports: { tab:"valuation", ledgerMaterialId:"", siteFilter:"All" },
     payment: { amount:"", date: todayISO(), remark:"" },
@@ -549,7 +549,7 @@ function vendorBalanceDue(vendorId){ return round2(vendorTotalBilled(vendorId) -
 function vendorLedgerEntries(vendorId){
   var entries = [];
   vendorBills(vendorId).forEach(function(b){
-    entries.push({date:b.billDate, kind:"bill", id:b.id, ref:(b.billNumber?("Tax Invoice "+b.billNumber):"Bill"), poId:b.poId||"", remark:b.remark||"", debit:num(b.amount,0), credit:0, createdAt:b.createdAt||""});
+    entries.push({date:b.billDate, kind:"bill", id:b.id, ref:(b.billNumber?("Tax Invoice "+b.billNumber):"Bill"), billNumber:b.billNumber||"", poId:b.poId||"", remark:b.remark||"", debit:num(b.amount,0), credit:0, createdAt:b.createdAt||""});
   });
   vendorPayments(vendorId).forEach(function(p){
     entries.push({date:p.date, kind:"payment", id:p.id, ref:"Payment", poId:"", remark:p.remark||"", debit:0, credit:num(p.amount,0), createdAt:p.createdAt||""});
@@ -735,7 +735,7 @@ function toSnakeRow(kind, obj){
       credit_period_days: num(obj.creditPeriodDays,30) };
   }
   if(kind==="purchaseOrders"){
-    return { id:obj.id, po_number:obj.poNumber||"", vendor_id:obj.vendorId||null, date:obj.date||null, status:obj.status||"Placed", terms:obj.terms||"" };
+    return { id:obj.id, po_number:obj.poNumber||"", vendor_id:obj.vendorId||null, date:obj.date||null, status:obj.status||"Placed", terms:obj.terms||"", site_id:obj.siteId||"" };
   }
   if(kind==="transactions"){
     return { id:obj.id, material_id:obj.materialId||null, material_name:obj.materialName||"", type:obj.type||"", qty:num(obj.qty,0), rate:num(obj.rate,0),
@@ -759,7 +759,7 @@ function fromSnakeRow(kind, row){
       creditPeriodDays: num(row.credit_period_days,30) };
   }
   if(kind==="purchaseOrders"){
-    return { id:row.id, poNumber:row.po_number||"", vendorId:row.vendor_id||"", date:row.date||"", status:row.status||"Placed", terms:row.terms||"", items:[] };
+    return { id:row.id, poNumber:row.po_number||"", vendorId:row.vendor_id||"", date:row.date||"", status:row.status||"Placed", terms:row.terms||"", siteId:row.site_id||"", items:[] };
   }
   if(kind==="transactions"){
     return { id:row.id, materialId:row.material_id||"", materialName:row.material_name||"", type:row.type||"", qty:num(row.qty,0), rate:num(row.rate,0),
@@ -903,6 +903,14 @@ function upsertVendor(id, payload){
   var existing = state.vendors.filter(function(v){return v.id===finalId;})[0] || {};
   var data = Object.assign({id:finalId}, existing, payload);
   persist("vendors", finalId, data).then(function(){ toast(isNew?"Vendor added.":"Vendor updated."); if(!state.db) render(); });
+}
+// Quick-add used from the Create Purchase Order form: create a vendor with just the essentials
+// and hand back its id so the caller can select it immediately, without leaving the PO screen.
+function quickAddVendor(payload){
+  if(!payload.name || !payload.name.trim()){ toast("Enter a vendor name.","danger"); return Promise.resolve(null); }
+  var id = uid("v");
+  var data = { id:id, name:payload.name.trim(), contact:(payload.contact||"").trim(), phone:(payload.phone||"").trim(), email:"", address:"", gstin:"", creditPeriodDays:num(payload.creditPeriodDays,30) };
+  return persist("vendors", id, data).then(function(){ toast("Vendor added."); return id; }).catch(function(){ return null; });
 }
 function deleteVendor(id){
   var v = state.vendors.filter(function(x){return x.id===id;})[0]; if(!v) return;
@@ -1182,6 +1190,64 @@ function receiveAgainstPO(poId, materialId, qty, rate, date, remark){
     toast("Stock received: "+qty+" "+mat.uom+" of "+mat.name+".");
   });
 }
+// Editing a past receipt can change its material, quantity, or the PO it's linked to. To keep the
+// PO's received-quantity tracking correct, we always fully revert the old receipt's contribution
+// first, then apply the new one — this handles every case (same PO, different PO, unlinked, or a
+// different material) without double-counting.
+function updateReceivedTransaction(id, payload){
+  var old = state.transactions.filter(function(t){return t.id===id;})[0];
+  if(!old){ toast("Entry not found.","danger"); return Promise.resolve(false); }
+  var mat = materialById(payload.materialId);
+  if(!mat){ toast("Select a material.","danger"); return Promise.resolve(false); }
+  if(!(num(payload.qty,0)>0)){ toast("Enter a quantity greater than 0.","danger"); return Promise.resolve(false); }
+
+  var touchedPOs = {};
+  if(old.poId){
+    var oldPo = state.purchaseOrders.filter(function(p){return p.id===old.poId;})[0];
+    if(oldPo){
+      var oldItem = oldPo.items.filter(function(it){return it.materialId===old.materialId;})[0];
+      if(oldItem) oldItem.receivedQty = round2(Math.max(0, num(oldItem.receivedQty,0) - num(old.qty,0)));
+      touchedPOs[oldPo.id] = oldPo;
+    }
+  }
+  var newPoId = payload.poId || "";
+  var newPo = newPoId ? state.purchaseOrders.filter(function(p){return p.id===newPoId;})[0] : null;
+  if(newPo){
+    var newItem = newPo.items.filter(function(it){return it.materialId===payload.materialId;})[0];
+    if(newItem) newItem.receivedQty = round2(num(newItem.receivedQty,0) + num(payload.qty,0));
+    touchedPOs[newPo.id] = newPo;
+  }
+  Object.keys(touchedPOs).forEach(function(pid){ touchedPOs[pid].status = computePoStatus(touchedPOs[pid]); });
+
+  var data = Object.assign({}, old, {
+    materialId: payload.materialId, materialName: mat.name, qty: num(payload.qty,0), rate: num(payload.rate,0),
+    poId: newPoId, poNumber: newPo?newPo.poNumber:"", date: payload.date||old.date, remark: (payload.remark||"").trim()
+  });
+  return persist("transactions", id, data).then(function(){
+    return Promise.all(Object.keys(touchedPOs).map(function(pid){ return persist("purchaseOrders", pid, touchedPOs[pid]); }));
+  }).then(function(){ toast("Receipt updated."); if(!state.db) render(); return true; }).catch(function(){ return false; });
+}
+// Deleting a receipt also has to give back what it added to the linked PO's received quantity.
+function deleteTransactionEntry(id){
+  var t = state.transactions.filter(function(x){return x.id===id;})[0]; if(!t) return;
+  var kindLabel = t.type==="received" ? "receipt" : "issue";
+  var extra = (t.type==="received" && t.poId) ? " and the linked purchase order's received quantity" : "";
+  if(!confirmAction("Delete this "+kindLabel+" of "+fmtNum(t.qty)+" "+(t.materialName||"")+"? This will adjust stock levels"+extra+".")) return;
+
+  var poToUpdate = null;
+  if(t.type==="received" && t.poId){
+    var po = state.purchaseOrders.filter(function(p){return p.id===t.poId;})[0];
+    if(po){
+      var item = po.items.filter(function(it){return it.materialId===t.materialId;})[0];
+      if(item) item.receivedQty = round2(Math.max(0, num(item.receivedQty,0) - num(t.qty,0)));
+      po.status = computePoStatus(po);
+      poToUpdate = po;
+    }
+  }
+  persist("transactions", id, null, true).then(function(){
+    if(poToUpdate) return persist("purchaseOrders", poToUpdate.id, poToUpdate);
+  }).then(function(){ toast("Entry deleted."); if(!state.db) render(); });
+}
 function issueMaterial(materialId, qty, date, siteId, remark){
   var mat = materialById(materialId);
   if(!mat){ toast("Select a material.","danger"); return; }
@@ -1191,6 +1257,18 @@ function issueMaterial(materialId, qty, date, siteId, remark){
   createTransaction({materialId:materialId, materialName:mat.name, type:"issued", qty:qty, rate:mat.purchaseRate, poId:"", poNumber:"", date:date||todayISO(), siteId:siteId||"", remark:(siteId?("Issued to: "+siteId+(remark?" — "+remark:"")):(remark||"Issued"))}).then(function(){
     toast("Issued "+qty+" "+mat.uom+" of "+mat.name+".");
   });
+}
+function updateIssuedTransaction(id, payload){
+  var old = state.transactions.filter(function(t){return t.id===id;})[0];
+  if(!old){ toast("Entry not found.","danger"); return Promise.resolve(false); }
+  var mat = materialById(payload.materialId);
+  if(!mat){ toast("Select a material.","danger"); return Promise.resolve(false); }
+  if(!(num(payload.qty,0)>0)){ toast("Enter a quantity greater than 0.","danger"); return Promise.resolve(false); }
+  var data = Object.assign({}, old, {
+    materialId: payload.materialId, materialName: mat.name, qty: num(payload.qty,0), rate: mat.purchaseRate,
+    date: payload.date||old.date, siteId: payload.siteId||"", remark: (payload.remark||"").trim()
+  });
+  return persist("transactions", id, data).then(function(){ toast("Issue entry updated."); if(!state.db) render(); return true; }).catch(function(){ return false; });
 }
 function addOpeningStock(materialId, qty, rate, date, remark){
   var mat = materialById(materialId); if(!mat){ toast("Select a material.","danger"); return; }
@@ -1692,7 +1770,7 @@ function renderPaymentsList(){
 var GST_SLABS = [0,5,12,18,28];
 function ensureBuilder(prefillMaterialId){
   if(!state.ui.pos.builder){
-    state.ui.pos.builder = { vendorId:"", date: todayISO(), terms: DEFAULT_PO_TERMS, items:[{materialId: prefillMaterialId||"", qty:"", rate: prefillMaterialId? (materialById(prefillMaterialId)||{}).purchaseRate : "", gstPct:18, remark:""}] };
+    state.ui.pos.builder = { vendorId:"", date: todayISO(), siteId:"", terms: DEFAULT_PO_TERMS, items:[{materialId: prefillMaterialId||"", qty:"", rate: prefillMaterialId? (materialById(prefillMaterialId)||{}).purchaseRate : "", gstPct:18, remark:""}] };
   } else if(prefillMaterialId){
     state.ui.pos.builder.items = [{materialId:prefillMaterialId, qty:"", rate:(materialById(prefillMaterialId)||{}).purchaseRate||"", gstPct:18, remark:""}];
   }
@@ -1717,8 +1795,10 @@ function pagePOs(){
     var taxable = num(it.qty,0)*num(it.rate,0);
     var lineTotal = taxable + taxable*num(it.gstPct,0)/100;
     var gstOpts = GST_SLABS.map(function(g){ return '<option value="'+g+'" '+(num(it.gstPct,18)===g?"selected":"")+'>'+g+'%</option>'; }).join("");
+    var itMat = materialById(it.materialId);
+    var descHtml = itMat && itMat.description ? '<div class="cell-muted" style="font-size:11px;margin-top:4px;max-width:180px;white-space:normal;">'+esc(itMat.description)+'</div>' : "";
     return '<tr data-idx="'+idx+'">' +
-      '<td><select class="po-item-material" data-idx="'+idx+'"><option value="">Select material</option>'+matOpts(it.materialId)+'</select></td>' +
+      '<td><select class="po-item-material" data-idx="'+idx+'"><option value="">Select material</option>'+matOpts(it.materialId)+'</select>'+descHtml+'</td>' +
       '<td><input class="po-item-qty" data-idx="'+idx+'" type="number" min="0" step="any" value="'+esc(it.qty)+'" style="width:80px;"></td>' +
       '<td><input class="po-item-rate" data-idx="'+idx+'" type="number" min="0" step="any" value="'+esc(it.rate)+'" style="width:100px;"></td>' +
       '<td><select class="po-item-gst" data-idx="'+idx+'" style="width:80px;">'+gstOpts+'</select></td>' +
@@ -1729,11 +1809,18 @@ function pagePOs(){
   }).join("");
   var builderTotals = poBuilderTotals(builder.items);
 
+  var isEditingPo = !!builder.id;
   var builderHtml = '<div class="card card-pad">' +
-    '<div class="section-head"><div><h2>Create Purchase Order</h2><div class="hint">Next PO number: <b class="num">'+esc(nextPoNumber())+'</b></div></div></div>' +
-    '<div class="form-grid" style="grid-template-columns:2fr 1fr;">' +
-      '<div class="field"><label for="poVendor">Vendor <span class="req">*</span></label><select id="poVendor">'+ '<option value="" disabled '+(builder.vendorId?"":"selected")+'>Select vendor</option>' +vendorOpts+'</select></div>' +
+    '<div class="section-head"><div><h2>'+(isEditingPo?"Edit Purchase Order":"Create Purchase Order")+'</h2><div class="hint">'+(isEditingPo?('Editing <b class="num">'+esc(builder.poNumber||"")+'</b>'):('Next PO number: <b class="num">'+esc(nextPoNumber())+'</b>'))+'</div></div></div>' +
+    '<div class="form-grid" style="grid-template-columns:2fr 1fr 1fr;">' +
+      '<div class="field"><label for="poVendor">Vendor <span class="req">*</span></label>' +
+        '<div style="display:flex;gap:8px;">' +
+          '<select id="poVendor" style="flex:1;">'+ '<option value="" disabled '+(builder.vendorId?"":"selected")+'>Select vendor</option>' +vendorOpts+'</select>' +
+          '<button type="button" class="btn btn-ghost btn-sm" data-action="open-quick-add-vendor" style="white-space:nowrap;">+ Add Vendor</button>' +
+        '</div>' +
+      '</div>' +
       '<div class="field"><label for="poDate">Date <span class="req">*</span></label><input id="poDate" type="date" value="'+esc(builder.date)+'"></div>' +
+      '<div class="field"><label for="poSite">Issue / Delivery Site</label><select id="poSite"><option value="" '+(builder.siteId?"":"selected")+'>No specific site</option>'+(state.settings.sites||[]).map(function(s){return '<option value="'+esc(s)+'" '+(builder.siteId===s?"selected":"")+'>'+esc(s)+'</option>';}).join("")+'</select></div>' +
     '</div>' +
     '<div class="table-wrap po-items-table" style="margin-top:14px;"><table><thead><tr><th>Material</th><th>Qty</th><th>Rate</th><th>GST %</th><th class="right">Amount (incl. GST)</th><th>Remarks</th><th></th></tr></thead><tbody id="poItemsBody">'+itemRows+'</tbody></table></div>' +
     '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-top:12px;">' +
@@ -1747,7 +1834,7 @@ function pagePOs(){
     '<div class="field" style="margin-top:16px;"><label for="poTerms">Remarks / Notes / Terms &amp; Conditions <span class="req">*</span></label>' +
       '<textarea id="poTerms" rows="4" required placeholder="Delivery, payment, quality or any other terms for this order…">'+esc(builder.terms)+'</textarea>' +
     '</div>' +
-    '<div style="display:flex;gap:10px;margin-top:16px;"><button class="btn btn-primary" data-action="po-submit">+ Create Purchase Order</button><button class="btn btn-ghost" data-action="po-reset">Clear</button></div>' +
+    '<div style="display:flex;gap:10px;margin-top:16px;"><button class="btn btn-primary" data-action="po-submit">'+(isEditingPo?"&#10003; Update Purchase Order":"+ Create Purchase Order")+'</button><button class="btn btn-ghost" data-action="po-reset">'+(isEditingPo?"Cancel Edit":"Clear")+'</button></div>' +
   '</div>';
 
   var ui2 = ui;
@@ -1779,27 +1866,35 @@ function renderPoList(){
       '<td><b class="num">'+esc(p.poNumber)+'</b></td>' +
       '<td>'+fmtDate(p.date)+'</td>' +
       '<td>'+esc(vendorName(p.vendorId))+'</td>' +
+      '<td class="cell-muted">'+(p.siteId?esc(p.siteId):"—")+'</td>' +
       '<td class="cell-muted">'+p.items.length+' item'+(p.items.length!==1?"s":"")+'</td>' +
       '<td class="right num">'+fmtCurrency(poItemsTotal(p))+'</td>' +
       '<td>'+statusBadge(poStatusTone(p.status),p.status)+'</td>' +
       '<td class="right"><div style="display:flex;gap:6px;justify-content:flex-end;">' +
         '<button class="iconbtn accent" title="View" data-action="view-po" data-id="'+p.id+'">&#128065;</button>' +
+        (p.status!=="Received" && p.status!=="Cancelled"? '<button class="iconbtn" title="Edit" data-action="edit-po" data-id="'+p.id+'">&#9998;</button>' : '') +
         '<button class="iconbtn" title="Download PDF" data-action="download-po-pdf" data-id="'+p.id+'">&#128196;</button>' +
         '<button class="iconbtn" title="Email to vendor" data-action="email-po" data-id="'+p.id+'">&#9993;</button>' +
         (p.status!=="Received" && p.status!=="Cancelled"? '<button class="iconbtn" title="Cancel PO" data-action="cancel-po" data-id="'+p.id+'">&#10005;</button>':'') +
       '</div></td>' +
     '</tr>';
   }).join("");
-  return '<div class="table-wrap"><table><thead><tr><th>PO No.</th><th>Date</th><th>Vendor</th><th>Items</th><th class="right">Total Value</th><th>Status</th><th></th></tr></thead><tbody>'+body+'</tbody></table></div>';
+  return '<div class="table-wrap"><table><thead><tr><th>PO No.</th><th>Date</th><th>Vendor</th><th>Site / Place</th><th>Items</th><th class="right">Total Value</th><th>Status</th><th></th></tr></thead><tbody>'+body+'</tbody></table></div>';
 }
 
 /* ============================= PAGE: receive material ============================= */
 function pageReceive(){
   var ui = state.ui.receive;
+  var editingTxn = ui.editingId ? state.transactions.filter(function(t){return t.id===ui.editingId;})[0] : null;
+  var editing = !!editingTxn;
   var openPOs = state.purchaseOrders.filter(function(p){return p.status==="Placed"||p.status==="Partial";});
+  if(editingTxn && editingTxn.poId && !openPOs.some(function(p){return p.id===editingTxn.poId;})){
+    var lockedPo = state.purchaseOrders.filter(function(p){return p.id===editingTxn.poId;})[0];
+    if(lockedPo) openPOs = openPOs.concat([lockedPo]);
+  }
   var poOpts = '<option value="">No PO — direct receipt</option>' + openPOs.map(function(p){return '<option value="'+p.id+'" '+(ui.poId===p.id?"selected":"")+'>'+esc(p.poNumber)+' — '+esc(vendorName(p.vendorId))+'</option>';}).join("");
   var selectedPo = openPOs.filter(function(p){return p.id===ui.poId;})[0];
-  var matChoices = selectedPo ? selectedPo.items.filter(function(it){return num(it.qty,0)-num(it.receivedQty,0)>0;}).map(function(it){return {id:it.materialId, name:it.materialName, pending:num(it.qty,0)-num(it.receivedQty,0)};}) : state.materials.map(function(m){return {id:m.id,name:m.name,pending:null};});
+  var matChoices = selectedPo ? selectedPo.items.filter(function(it){return num(it.qty,0)-num(it.receivedQty,0)>0 || it.materialId===ui.materialId;}).map(function(it){return {id:it.materialId, name:it.materialName, pending:num(it.qty,0)-num(it.receivedQty,0)};}) : state.materials.map(function(m){return {id:m.id,name:m.name,pending:null};});
   var matOpts = '<option value="">Select material</option>' + matChoices.map(function(m){return '<option value="'+m.id+'" '+(ui.materialId===m.id?"selected":"")+'>'+esc(m.name)+(m.pending!==null?(" — pending "+fmtNum(m.pending)):"")+'</option>';}).join("");
   var mat = materialById(ui.materialId);
 
@@ -1812,7 +1907,7 @@ function pageReceive(){
   }
 
   return '<div class="card card-pad">' +
-    '<div class="section-head"><div><h2>Receive Material</h2><div class="hint">Log stock received from a vendor — against a purchase order, or directly.</div></div></div>' +
+    '<div class="section-head"><div><h2>'+(editing?"Edit Received Entry":"Receive Material")+'</h2><div class="hint">'+(editing?"Editing an existing receipt — saving will adjust stock and the linked purchase order's received quantity accordingly.":"Log stock received from a vendor — against a purchase order, or directly.")+'</div></div></div>' +
     '<form novalidate data-form="receive">' +
       '<div class="form-grid">' +
         '<div class="field" style="grid-column:span 1;"><label for="rcvPo">Purchase Order</label><select id="rcvPo">'+poOpts+'</select></div>' +
@@ -1824,7 +1919,9 @@ function pageReceive(){
         '<div class="field" style="grid-column:span 3;"><label for="rcvRemark">Remark</label><input id="rcvRemark" placeholder="e.g. Received from vendor, Invoice #123" value="'+esc(ui.remark)+'"></div>' +
       '</div>' +
       poPreview +
-      '<div style="display:flex;gap:10px;margin-top:14px;"><button type="submit" class="btn btn-primary">+ Record Receipt</button><button type="reset" class="btn btn-ghost" data-action="reset-receive">Clear</button></div>' +
+      '<div style="display:flex;gap:10px;margin-top:14px;"><button type="submit" class="btn btn-primary">'+(editing?"&#10003; Update Receipt":"+ Record Receipt")+'</button>' +
+        (editing? '<button type="button" class="btn btn-ghost" data-action="reset-receive">Cancel Edit</button>' : '<button type="reset" class="btn btn-ghost" data-action="reset-receive">Clear</button>') +
+      '</div>' +
     '</form>' +
   '</div>' +
   '<div class="card card-pad" style="margin-top:16px;">' +
@@ -1833,23 +1930,28 @@ function pageReceive(){
   '</div>';
 }
 function renderRecentTxns(type){
-  var rows = state.transactions.filter(function(t){return t.type===type;}).sort(function(a,b){return (b.createdAt||b.date||"").localeCompare(a.createdAt||a.date||"");}).slice(0,12);
+  var rows = state.transactions.filter(function(t){return t.type===type;}).sort(function(a,b){return (b.createdAt||b.date||"").localeCompare(a.createdAt||a.date||"");}).slice(0,20);
   if(!rows.length) return emptyState("No entries yet.","&#128203;");
   var body = rows.map(function(t){
-    return '<tr><td>'+fmtDate(t.date)+'</td><td><b>'+esc(t.materialName)+'</b></td><td class="right num">'+fmtNum(t.qty)+'</td><td class="right num">'+fmtCurrency(num(t.qty,0)*num(t.rate,0))+'</td><td class="cell-muted">'+esc(t.poNumber||"—")+'</td><td class="cell-muted">'+esc(t.remark||"")+'</td></tr>';
+    return '<tr><td>'+fmtDate(t.date)+'</td><td><b>'+esc(t.materialName)+'</b></td><td class="right num">'+fmtNum(t.qty)+'</td><td class="right num">'+fmtCurrency(num(t.qty,0)*num(t.rate,0))+'</td><td class="cell-muted">'+esc(t.poNumber||"—")+'</td><td class="cell-muted">'+esc(t.remark||"")+'</td>' +
+      '<td class="right"><div style="display:flex;gap:6px;justify-content:flex-end;">' +
+        '<button class="iconbtn" title="Edit" data-action="edit-received-txn" data-id="'+t.id+'">&#9998;</button>' +
+        '<button class="iconbtn danger" title="Delete" data-action="delete-txn" data-id="'+t.id+'">&#128465;</button>' +
+      '</div></td></tr>';
   }).join("");
-  return '<div class="table-wrap"><table><thead><tr><th>Date</th><th>Material</th><th class="right">Qty</th><th class="right">Value</th><th>PO Ref.</th><th>Remark</th></tr></thead><tbody>'+body+'</tbody></table></div>';
+  return '<div class="table-wrap"><table><thead><tr><th>Date</th><th>Material</th><th class="right">Qty</th><th class="right">Value</th><th>PO Ref.</th><th>Remark</th><th></th></tr></thead><tbody>'+body+'</tbody></table></div>';
 }
 
 /* ============================= PAGE: issue material ============================= */
 function pageIssue(){
   var ui = state.ui.issue;
+  var editing = !!ui.editingId;
   var matOpts = '<option value="">Select material</option>' + state.materials.map(function(m){ var c=stockFor(m.id).closing; return '<option value="'+m.id+'" '+(ui.materialId===m.id?"selected":"")+'>'+esc(m.name)+' — '+fmtNum(c)+' '+esc(m.uom)+' in stock</option>'; }).join("");
   var mat = materialById(ui.materialId);
   var avail = mat? stockFor(mat.id).closing : null;
   var siteOpts = '<option value="">Select site</option>' + (state.settings.sites||[]).map(function(s){return '<option value="'+esc(s)+'" '+(ui.siteId===s?"selected":"")+'>'+esc(s)+'</option>';}).join("");
   return '<div class="card card-pad">' +
-    '<div class="section-head"><div><h2>Issue Material</h2><div class="hint">Log material issued out to a site or project. Reduces available stock.</div></div></div>' +
+    '<div class="section-head"><div><h2>'+(editing?"Edit Issued Entry":"Issue Material")+'</h2><div class="hint">'+(editing?"Editing an existing issue — saving will adjust available stock accordingly.":"Log material issued out to a site or project. Reduces available stock.")+'</div></div></div>' +
     '<form novalidate data-form="issue">' +
       '<div class="form-grid">' +
         '<div class="field"><label for="issMaterial">Material <span class="req">*</span></label><select id="issMaterial" required>'+matOpts+'</select></div>' +
@@ -1859,7 +1961,9 @@ function pageIssue(){
         '<div class="field" style="grid-column:span 2;"><label for="issRemark">Remark</label><input id="issRemark" placeholder="Optional note" value="'+esc(ui.remark)+'"></div>' +
       '</div>' +
       (mat? '<div class="cell-muted" style="margin-top:10px;">Currently available: <b class="num">'+fmtNum(avail)+' '+esc(mat.uom)+'</b></div>' : '') +
-      '<div style="display:flex;gap:10px;margin-top:14px;"><button type="submit" class="btn btn-primary">+ Record Issue</button><button type="reset" class="btn btn-ghost" data-action="reset-issue">Clear</button></div>' +
+      '<div style="display:flex;gap:10px;margin-top:14px;"><button type="submit" class="btn btn-primary">'+(editing?"&#10003; Update Issue":"+ Record Issue")+'</button>' +
+        (editing? '<button type="button" class="btn btn-ghost" data-action="reset-issue">Cancel Edit</button>' : '<button type="reset" class="btn btn-ghost" data-action="reset-issue">Clear</button>') +
+      '</div>' +
     '</form>' +
   '</div>' +
   '<div class="card card-pad" style="margin-top:16px;">' +
@@ -1884,9 +1988,13 @@ function renderIssueList(){
   if(!rows.length) return emptyState("No issues match your filters.","&#128203;");
   var shown = rows.slice(0,50);
   var body = shown.map(function(t){
-    return '<tr><td>'+fmtDate(t.date)+'</td><td><b>'+esc(t.materialName)+'</b></td><td class="right num">'+fmtNum(t.qty)+'</td><td class="right num">'+fmtCurrency(num(t.qty,0)*num(t.rate,0))+'</td><td class="cell-muted">'+esc(t.siteId||"—")+'</td><td class="cell-muted">'+esc(t.remark||"")+'</td></tr>';
+    return '<tr><td>'+fmtDate(t.date)+'</td><td><b>'+esc(t.materialName)+'</b></td><td class="right num">'+fmtNum(t.qty)+'</td><td class="right num">'+fmtCurrency(num(t.qty,0)*num(t.rate,0))+'</td><td class="cell-muted">'+esc(t.siteId||"—")+'</td><td class="cell-muted">'+esc(t.remark||"")+'</td>' +
+      '<td class="right"><div style="display:flex;gap:6px;justify-content:flex-end;">' +
+        '<button class="iconbtn" title="Edit" data-action="edit-issued-txn" data-id="'+t.id+'">&#9998;</button>' +
+        '<button class="iconbtn danger" title="Delete" data-action="delete-txn" data-id="'+t.id+'">&#128465;</button>' +
+      '</div></td></tr>';
   }).join("");
-  return '<div class="table-wrap"><table><thead><tr><th>Date</th><th>Material</th><th class="right">Qty</th><th class="right">Value</th><th>Site / Place</th><th>Remark</th></tr></thead><tbody>'+body+'</tbody></table></div>' +
+  return '<div class="table-wrap"><table><thead><tr><th>Date</th><th>Material</th><th class="right">Qty</th><th class="right">Value</th><th>Site / Place</th><th>Remark</th><th></th></tr></thead><tbody>'+body+'</tbody></table></div>' +
     '<div class="cell-muted" style="margin-top:10px;">Showing '+shown.length+' of '+rows.length+' matching issues ('+totalIssued+' total)</div>';
 }
 
@@ -2108,7 +2216,20 @@ function renderModal(){
   if(modal.type==="ledger") return modalWrap("Stock Ledger — "+esc((materialById(modal.id)||{}).name||""), ledgerModalBody(modal.id), true);
   if(modal.type==="po-view") return modalWrap("Purchase Order "+esc((state.purchaseOrders.filter(function(p){return p.id===modal.id;})[0]||{}).poNumber||""), poViewBody(modal.id), true);
   if(modal.type==="vendor-ledger") return modalWrap("Vendor Ledger — "+esc((vendorById(modal.id)||{}).name||""), vendorLedgerBody(modal.id), true);
+  if(modal.type==="quick-add-vendor") return modalWrap("Add New Vendor", quickAddVendorBody(), false);
   return "";
+}
+function quickAddVendorBody(){
+  return '<form novalidate data-form="quick-add-vendor">' +
+    '<div class="form-grid">' +
+      '<div class="field"><label for="qvName">Vendor Name <span class="req">*</span></label><input id="qvName" name="name" required placeholder="e.g. Shree Electricals &amp; Co."></div>' +
+      '<div class="field"><label for="qvContact">Contact Person</label><input id="qvContact" name="contact" placeholder="Optional"></div>' +
+      '<div class="field"><label for="qvPhone">Phone</label><input id="qvPhone" name="phone" placeholder="Optional"></div>' +
+      '<div class="field"><label for="qvCredit">Credit Period (Days)</label><input id="qvCredit" name="creditPeriodDays" type="number" min="0" step="1" value="30"></div>' +
+    '</div>' +
+    '<div class="cell-muted" style="margin-top:10px;font-size:12px;">You can fill in GSTIN, email and address later from the Vendors page.</div>' +
+    '<div style="display:flex;gap:10px;margin-top:14px;"><button type="submit" class="btn btn-primary">+ Add Vendor</button><button type="button" class="btn btn-ghost" data-action="close-modal">Cancel</button></div>' +
+  '</form>';
 }
 function modalWrap(title, body, wide){
   return '<div class="modal-backdrop" data-action="modal-backdrop">' +
@@ -2145,7 +2266,11 @@ function poViewBody(poId){
   var bills = poBills(po.id).slice().sort(function(a,b){return (b.billDate||"").localeCompare(a.billDate||"");});
   var billedTotal = poBilledTotal(po.id);
   var billRows = bills.map(function(b){
-    return '<tr><td>'+fmtDate(b.billDate)+'</td><td class="cell-muted">'+esc(b.billNumber||"—")+'</td><td class="right num">'+fmtCurrency(b.amount)+'</td><td class="cell-muted">'+esc(b.remark||"—")+'</td><td class="right"><button class="iconbtn danger" title="Delete" data-action="delete-bill" data-id="'+b.id+'">&#128465;</button></td></tr>';
+    return '<tr><td>'+fmtDate(b.billDate)+'</td><td class="cell-muted">'+esc(b.billNumber||"—")+'</td><td class="right num">'+fmtCurrency(b.amount)+'</td><td class="cell-muted">'+esc(b.remark||"—")+'</td>' +
+      '<td class="right"><div style="display:flex;gap:6px;justify-content:flex-end;">' +
+        '<button class="iconbtn" title="Edit" data-action="edit-bill" data-id="'+b.id+'">&#9998;</button>' +
+        '<button class="iconbtn danger" title="Delete" data-action="delete-bill" data-id="'+b.id+'">&#128465;</button>' +
+      '</div></td></tr>';
   }).join("");
   var billingSection =
     '<div class="card-pad" style="background:var(--surface-2);border-radius:9px;margin-top:16px;">' +
@@ -2166,6 +2291,7 @@ function poViewBody(poId){
     '</div>';
   return '<div class="stat-line"><span>Vendor</span><b>'+esc(vendorName(po.vendorId))+'</b></div>' +
     '<div class="stat-line"><span>Date</span><b>'+fmtDate(po.date)+'</b></div>' +
+    (po.siteId? '<div class="stat-line"><span>Issue / Delivery Site</span><b>'+esc(po.siteId)+'</b></div>' : '') +
     '<div class="stat-line"><span>Status</span>'+statusBadge(poStatusTone(po.status),po.status)+'</div>' +
     '<div class="table-wrap" style="margin-top:12px;"><table><thead><tr><th>Material</th><th class="right">Ordered</th><th class="right">Rate</th><th class="right">Taxable</th><th class="right">GST %</th><th class="right">GST Amt</th><th class="right">Total</th><th class="right">Received</th><th class="right">Pending</th><th>Remarks</th></tr></thead><tbody>'+itemRows+
     '<tr style="font-weight:700;"><td colspan="3" class="right">Subtotal / GST / Grand Total</td><td class="right num">'+fmtCurrency(poItemsTotal(po))+'</td><td></td><td class="right num">'+fmtCurrency(poItemsGstTotal(po))+'</td><td class="right num">'+fmtCurrency(poItemsGrandTotal(po))+'</td><td colspan="3"></td></tr></tbody></table></div>' +
@@ -2173,6 +2299,7 @@ function poViewBody(poId){
     '<div style="margin-top:14px;"><div class="cell-muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">Remarks / Terms &amp; Conditions</div>' +
       '<div class="card-pad" style="background:var(--surface-2);border-radius:9px;white-space:pre-wrap;font-size:13px;">'+esc(po.terms||"No remarks recorded for this order.")+'</div></div>' +
     '<div style="display:flex;gap:9px;flex-wrap:wrap;margin-top:16px;">' +
+      (po.status!=="Received" && po.status!=="Cancelled"? '<button class="btn btn-ghost btn-sm" data-action="edit-po" data-id="'+po.id+'">&#9998; Edit Order</button>' : '') +
       '<button class="btn btn-ghost btn-sm" data-action="download-po-pdf" data-id="'+po.id+'">&#128196; Download PDF</button>' +
       '<button class="btn btn-ghost btn-sm" data-action="email-po" data-id="'+po.id+'" '+(vendor&&vendor.email?"":"disabled title=\"Add an email for this vendor first\"")+'>&#9993; Email to Vendor</button>' +
       (po.status!=="Received" && po.status!=="Cancelled"? '<button class="btn btn-primary btn-sm" data-action="quick-receive-po" data-id="'+po.id+'">Go to Receive Material</button>' : '') +
@@ -2184,13 +2311,18 @@ function vendorLedgerBody(vendorId){
   var summary = vendorPayableSummary(vendorId);
   var entries = vendorLedgerEntries(vendorId);
   var rows = entries.slice().reverse().map(function(e){
-    var refCell = esc(e.ref) + (e.remark? (' <span class="cell-muted">— '+esc(e.remark)+'</span>') : "");
+    var typeCell = (e.kind==="bill"?"Tax Invoice":"Payment") + (e.remark? (' <div class="cell-muted" style="font-size:11.5px;">'+esc(e.remark)+'</div>') : "");
+    var invCell = e.kind==="bill" ? esc(e.billNumber||"—") : "—";
     var delAction = e.kind==="bill" ? "delete-bill" : "delete-payment";
-    return '<tr><td>'+fmtDate(e.date)+'</td><td>'+refCell+'</td>' +
+    var editAction = e.kind==="bill" ? "edit-bill" : "edit-payment";
+    return '<tr><td>'+fmtDate(e.date)+'</td><td>'+typeCell+'</td><td class="cell-muted">'+invCell+'</td>' +
       '<td class="right num">'+(e.debit>0?fmtCurrency(e.debit):'<span class="cell-muted">—</span>')+'</td>' +
       '<td class="right num">'+(e.credit>0?fmtCurrency(e.credit):'<span class="cell-muted">—</span>')+'</td>' +
       '<td class="right num"><b>'+fmtCurrency(e.balance)+'</b></td>' +
-      '<td class="right"><button class="iconbtn danger" title="Delete" data-action="'+delAction+'" data-id="'+e.id+'">&#128465;</button></td></tr>';
+      '<td class="right"><div style="display:flex;gap:6px;justify-content:flex-end;">' +
+        '<button class="iconbtn" title="Edit" data-action="'+editAction+'" data-id="'+e.id+'">&#9998;</button>' +
+        '<button class="iconbtn danger" title="Delete" data-action="'+delAction+'" data-id="'+e.id+'">&#128465;</button>' +
+      '</div></td></tr>';
   }).join("");
   return '<div class="grid" style="grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:14px;">' +
       statTile("Credit Period", fmtNum(vendor.creditPeriodDays!==undefined?vendor.creditPeriodDays:30)+" days") +
@@ -2199,7 +2331,7 @@ function vendorLedgerBody(vendorId){
     '<div class="stat-line" style="margin-bottom:14px;"><span>Status</span>'+statusBadge(summary.tone,summary.label)+(summary.dueDate?(' <span class="cell-muted" style="margin-left:8px;">Due '+fmtDate(summary.dueDate)+(summary.daysOverdue>0?(' &middot; '+summary.daysOverdue+' day'+(summary.daysOverdue===1?"":"s")+' overdue'):(summary.daysOverdue<0?(' &middot; due in '+(-summary.daysOverdue)+' day'+(summary.daysOverdue===-1?"":"s")):''))+'</span>'):'')+'</div>' +
     '<h4 style="margin-bottom:8px;font-size:13px;">Ledger — Bills (debit) &amp; Payments (credit)</h4>' +
     (entries.length ?
-      '<div class="table-wrap"><table><thead><tr><th>Date</th><th>Reference</th><th class="right">Debit</th><th class="right">Credit</th><th class="right">Balance</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'
+      '<div class="table-wrap"><table><thead><tr><th>Date</th><th>Type</th><th>Invoice No.</th><th class="right">Debit</th><th class="right">Credit</th><th class="right">Balance</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'
       : emptyState("No bills or payments recorded for this vendor yet.")) +
     '<div class="grid" style="grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;">' +
       '<div class="card-pad" style="background:var(--surface-2);border-radius:9px;">' +
@@ -2250,6 +2382,21 @@ function bindGlobalHandlers(){
         if(state.page==="pos") state.ui.pos.builder=null;
         render(); break;
       case "close-modal": case "modal-backdrop": state.ui.modal=null; render(); break;
+      case "open-quick-add-vendor": state.ui.modal = {type:"quick-add-vendor"}; render(); break;
+      case "edit-po":
+        var poToEdit = state.purchaseOrders.filter(function(p){return p.id===id;})[0];
+        if(poToEdit){
+          if(poToEdit.status==="Received" || poToEdit.status==="Cancelled"){ toast("This order is "+poToEdit.status.toLowerCase()+" and can't be edited.","danger"); break; }
+          state.ui.modal = null;
+          state.page = "pos";
+          state.ui.pos.builder = {
+            id: poToEdit.id, poNumber: poToEdit.poNumber, vendorId: poToEdit.vendorId, date: poToEdit.date, siteId: poToEdit.siteId||"",
+            terms: poToEdit.terms,
+            items: poToEdit.items.map(function(it){ return Object.assign({}, it); })
+          };
+          render(); scrollTopOfContent();
+        }
+        break;
 
       case "edit-material": state.ui.materials.editingId = id; render(); scrollTopOfContent(); break;
       case "cancel-edit-material": state.ui.materials.editingId = null; render(); break;
@@ -2264,9 +2411,9 @@ function bindGlobalHandlers(){
       case "view-vendor-ledger": state.ui.modal = {type:"vendor-ledger", id:id}; render(); break;
 
       case "bills-tab": state.ui.bills.tab = t.getAttribute("data-tab"); state.ui.bills.editingId = null; render(); break;
-      case "edit-bill": state.ui.bills.tab = "bills"; state.ui.bills.editingId = id; render(); scrollTopOfContent(); break;
+      case "edit-bill": state.ui.modal = null; state.page = "bills"; state.ui.bills.tab = "bills"; state.ui.bills.editingId = id; render(); scrollTopOfContent(); break;
       case "cancel-edit-bill": state.ui.bills.editingId = null; render(); break;
-      case "edit-payment": state.ui.bills.tab = "payments"; state.ui.bills.editingId = id; render(); scrollTopOfContent(); break;
+      case "edit-payment": state.ui.modal = null; state.page = "bills"; state.ui.bills.tab = "payments"; state.ui.bills.editingId = id; render(); scrollTopOfContent(); break;
       case "cancel-edit-payment": state.ui.bills.editingId = null; render(); break;
 
       case "view-ledger": state.ui.modal = {type:"ledger", id:id}; render(); break;
@@ -2290,8 +2437,17 @@ function bindGlobalHandlers(){
 
       case "inv-tab": state.ui.inventory.tab = t.getAttribute("data-tab"); render(); break;
       case "reset-inv-entry": state.ui.inventory.entry={materialId:"",qty:"",rate:"",remark:"",poId:""}; render(); break;
-      case "reset-receive": state.ui.receive={materialId:"",poId:"",qty:"",rate:"",remark:"",date:todayISO()}; render(); break;
-      case "reset-issue": state.ui.issue={materialId:"",qty:"",siteId:"",remark:"",date:todayISO()}; render(); break;
+      case "reset-receive": state.ui.receive={materialId:"",poId:"",qty:"",rate:"",remark:"",date:todayISO(),editingId:null}; render(); break;
+      case "reset-issue": state.ui.issue={materialId:"",qty:"",siteId:"",remark:"",date:todayISO(),editingId:null}; render(); break;
+      case "edit-received-txn":
+        var rtxn = state.transactions.filter(function(t){return t.id===id;})[0];
+        if(rtxn){ state.ui.receive = {editingId:id, materialId:rtxn.materialId, poId:rtxn.poId||"", qty:rtxn.qty, rate:rtxn.rate, remark:rtxn.remark||"", date:rtxn.date||todayISO()}; render(); scrollTopOfContent(); }
+        break;
+      case "edit-issued-txn":
+        var itxn = state.transactions.filter(function(t){return t.id===id;})[0];
+        if(itxn){ state.ui.issue = {editingId:id, materialId:itxn.materialId, qty:itxn.qty, siteId:itxn.siteId||"", remark:itxn.remark||"", date:itxn.date||todayISO()}; render(); scrollTopOfContent(); }
+        break;
+      case "delete-txn": deleteTransactionEntry(id); break;
       case "reset-material-stock": resetMaterialStock(id); break;
 
       case "reports-tab": state.ui.reports.tab = t.getAttribute("data-tab"); render(); break;
@@ -2327,12 +2483,20 @@ function bindGlobalHandlers(){
       state.ui.vendors.editingId = null; render();
     } else if(kind==="receive"){
       var poId = readEntry("rcvPo"), materialId = readEntry("rcvMaterial"), qty = num(readEntry("rcvQty"),0), rate = num(readEntry("rcvRate"),0), date = readEntry("rcvDate"), remark = readEntry("rcvRemark");
-      receiveAgainstPO(poId, materialId, qty, rate, date, remark);
-      state.ui.receive = {materialId:"",poId:"",qty:"",rate:"",remark:"",date:todayISO()}; render();
+      if(state.ui.receive.editingId){
+        updateReceivedTransaction(state.ui.receive.editingId, {materialId:materialId, poId:poId, qty:qty, rate:rate, date:date, remark:remark});
+      } else {
+        receiveAgainstPO(poId, materialId, qty, rate, date, remark);
+      }
+      state.ui.receive = {materialId:"",poId:"",qty:"",rate:"",remark:"",date:todayISO(),editingId:null}; render();
     } else if(kind==="issue"){
       var imid = readEntry("issMaterial"), iqty = num(readEntry("issQty"),0), idate = readEntry("issDate"), isite = readEntry("issSite"), irem = readEntry("issRemark");
-      issueMaterial(imid, iqty, idate, isite, irem);
-      state.ui.issue = {materialId:"",qty:"",siteId:"",remark:"",date:todayISO()}; render();
+      if(state.ui.issue.editingId){
+        updateIssuedTransaction(state.ui.issue.editingId, {materialId:imid, qty:iqty, date:idate, siteId:isite, remark:irem});
+      } else {
+        issueMaterial(imid, iqty, idate, isite, irem);
+      }
+      state.ui.issue = {materialId:"",qty:"",siteId:"",remark:"",date:todayISO(),editingId:null}; render();
     } else if(kind==="inventory-entry"){
       var tab = state.ui.inventory.tab;
       var mId = readEntry("invMaterial"), qtyVal = num(readEntry("invQty"),0), rateVal = num(readEntry("invRate"),0), remarkVal = readEntry("invRemark");
@@ -2359,6 +2523,11 @@ function bindGlobalHandlers(){
       var fpPayload = { vendorId:readVal(form,"vendorId"), date:readVal(form,"date")||todayISO(), amount:num(readVal(form,"amount"),0), remark:readVal(form,"remark").trim() };
       upsertPayment(fpId, fpPayload);
       state.ui.bills.editingId = null; render();
+    } else if(kind==="quick-add-vendor"){
+      var qvPayload = { name:readVal(form,"name"), contact:readVal(form,"contact"), phone:readVal(form,"phone"), creditPeriodDays:num(readVal(form,"creditPeriodDays"),30) };
+      quickAddVendor(qvPayload).then(function(newId){
+        if(newId){ ensureBuilder(); state.ui.pos.builder.vendorId = newId; state.ui.modal = null; render(); }
+      });
     } else if(kind==="add-list-item"){
       var key2 = form.getAttribute("data-key");
       var input = document.getElementById("new_"+key2);
@@ -2409,6 +2578,7 @@ function bindGlobalHandlers(){
       case "invStatusFilter": state.ui.inventory.statusFilter = el.value; refreshInvList(); return;
       case "poVendor": ensureBuilder(); state.ui.pos.builder.vendorId = el.value; return;
       case "poDate": ensureBuilder(); state.ui.pos.builder.date = el.value; return;
+      case "poSite": ensureBuilder(); state.ui.pos.builder.siteId = el.value; return;
       case "rcvPo": state.ui.receive.poId = el.value; state.ui.receive.materialId=""; render(); return;
       case "rcvMaterial": state.ui.receive.materialId = el.value; var m=materialById(el.value); if(m && !state.ui.receive.rate) state.ui.receive.rate=m.purchaseRate; render(); return;
       case "rcvRate": state.ui.receive.rate = el.value; return;
@@ -2458,15 +2628,18 @@ function updatePoLine(el){
 function submitPO(){
   var b = state.ui.pos.builder;
   if(!b.vendorId){ toast("Select a vendor.","danger"); return; }
+  var isEditingPo = !!b.id;
   var items = b.items.filter(function(it){return it.materialId && num(it.qty,0)>0;}).map(function(it){
     var m = materialById(it.materialId);
-    return {materialId:it.materialId, materialName:m?m.name:"", qty:num(it.qty,0), rate:num(it.rate,0), gstPct:num(it.gstPct,18), receivedQty:0, remark:(it.remark||"").trim()};
+    return {materialId:it.materialId, materialName:m?m.name:"", qty:num(it.qty,0), rate:num(it.rate,0), gstPct:num(it.gstPct,18), receivedQty:num(it.receivedQty,0), remark:(it.remark||"").trim()};
   });
   if(!items.length){ toast("Add at least one line item with a quantity.","danger"); return; }
   var terms = (b.terms||"").trim();
   if(!terms){ toast("Remarks / Terms & Conditions is required before creating the order.","danger"); return; }
   var poDate = b.date||todayISO();
-  var po = {poNumber: nextPoNumber(), vendorId:b.vendorId, date: poDate, items: items, status:"Placed", terms: terms};
+  var po = { vendorId:b.vendorId, date: poDate, siteId:b.siteId||"", items: items, terms: terms };
+  if(isEditingPo){ po.id = b.id; po.poNumber = b.poNumber; }
+  else { po.poNumber = nextPoNumber(); po.status = "Placed"; }
   savePO(po).then(function(saved){ state.ui.pos.builder=null; state.ui.modal={type:"po-view", id:saved.id}; render(); });
 }
 
