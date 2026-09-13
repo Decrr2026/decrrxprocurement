@@ -1,8 +1,12 @@
-
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>DECRR Interio</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap" rel="stylesheet">
 <style>
 :root{
   --bg:#F9FAFB; --surface:#FFFFFF; --surface-2:#F3F4F6; --border:#E5E7EB;
@@ -249,24 +253,39 @@ tbody tr:hover{background:var(--surface-2);}
 .dash-toolbar select{min-width:0;}
 .filter-label{font-size:10.5px; color:var(--text-faint); text-transform:uppercase; letter-spacing:.05em; margin-bottom:3px; display:block;}
 .filter-field{display:flex; flex-direction:column;}
-.auth-wrap{min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px; background:var(--bg);}
-.auth-card{position:relative; background:var(--surface);
-  border:1px solid var(--border); border-radius:var(--radius-lg);
-  box-shadow:var(--shadow-lg);
+.auth-wrap{
+  --a-ink:#17140F; --a-paper:#EDE7DB; --a-paper-dim:#8A8271; --a-line:rgba(237,231,219,.14);
+  --a-green:#3E5C46; --a-green-bright:#5C8268; --a-brass:#B8935B;
+  min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px;
+  background:var(--a-ink); position:relative; overflow:hidden;
+}
+.auth-wrap::before{
+  content:""; position:absolute; inset:0; pointer-events:none;
+  background-image:linear-gradient(var(--a-line) 1px, transparent 1px), linear-gradient(90deg, var(--a-line) 1px, transparent 1px);
+  background-size:52px 52px;
+  -webkit-mask-image:radial-gradient(460px circle at var(--amx,50%) var(--amy,32%), rgba(0,0,0,.9), rgba(0,0,0,.1) 70%);
+  mask-image:radial-gradient(460px circle at var(--amx,50%) var(--amy,32%), rgba(0,0,0,.9), rgba(0,0,0,.1) 70%);
+}
+.auth-card{position:relative; background:var(--a-paper); color:var(--a-ink);
+  border:1px solid var(--a-line); border-radius:3px;
+  box-shadow:0 30px 60px -20px rgba(0,0,0,.55);
   padding:40px 36px; width:100%; max-width:380px; text-align:center;}
-.auth-logo{width:52px;height:52px;border-radius:12px;background:var(--surface);padding:7px;margin:0 auto 20px;
-  border:1px solid var(--border); box-shadow:var(--shadow);}
+.auth-logo{width:52px;height:52px;border-radius:8px;background:#fff;padding:7px;margin:0 auto 22px;
+  border:1px solid rgba(23,20,15,.1); box-shadow:0 2px 8px rgba(0,0,0,.12);}
 .auth-logo img{width:100%;height:100%;object-fit:contain;display:block;}
-.auth-eyebrow{font-family:'Inter',sans-serif; font-size:11px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--accent); margin-bottom:10px;}
-.auth-title{font-family:'Inter',sans-serif; font-size:21px; font-weight:700; letter-spacing:-.02em; color:var(--text); margin:0;}
-.auth-sub{color:var(--text-muted); font-size:13px; margin-top:6px;}
-.auth-splash-msg{color:var(--text-muted); font-size:12.5px; margin-top:14px;}
-.auth-error{background:var(--danger-weak); color:var(--danger); border:1px solid var(--danger-weak); border-radius:8px; padding:9px 12px; font-size:12.5px; margin-top:18px; text-align:left;}
+.auth-title{font-family:'Fraunces',Georgia,serif; font-size:24px; font-weight:600; letter-spacing:.01em; text-transform:uppercase; color:var(--a-ink); margin:0;}
+.auth-sub{color:#5A5344; font-size:13.5px; margin-top:8px;}
+.auth-splash-msg{color:#5A5344; font-size:12.5px; margin-top:14px;}
+.auth-error{background:rgba(155,50,40,.08); color:#8c3527; border:1px solid rgba(155,50,40,.25); border-radius:2px; padding:9px 12px; font-size:12.5px; margin-top:18px; text-align:left;}
 .auth-card .field{text-align:left; margin-top:14px;}
-.auth-card .field label{text-align:left; color:var(--text-muted); font-size:11.5px; font-weight:600;}
-.auth-card .btn-primary{width:100%; justify-content:center;}
-.auth-status{margin-top:24px; font-size:11px; letter-spacing:.03em; color:var(--success); display:flex; align-items:center; justify-content:center;}
-.auth-status .dot{display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--success); margin-right:7px;}
+.auth-card .field label{text-align:left; color:#5A5344; font-size:10.5px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; font-family:'IBM Plex Mono',monospace;}
+.auth-card input{border-radius:2px;}
+.auth-card .btn-primary{width:100%; justify-content:center; background:var(--a-green); border-color:var(--a-green);
+  font-family:'IBM Plex Mono',monospace; font-size:12.5px; letter-spacing:.08em; text-transform:uppercase; border-radius:2px;}
+.auth-card .btn-primary:hover{background:var(--a-green-bright); border-color:var(--a-green-bright);}
+.auth-foot{margin-top:26px; font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.12em; text-transform:uppercase;}
+.auth-foot a{color:var(--a-paper-dim); text-decoration:none; border-bottom:1px solid transparent; transition:color .2s, border-color .2s;}
+.auth-foot a:hover{color:var(--a-brass); border-color:var(--a-brass);}
 @media (max-width:640px){
   #sidebar{position:fixed; left:0; top:0; transform:translateX(-100%); box-shadow:0 0 0 100vmax rgba(0,0,0,0);}
   #sidebar.open{transform:translateX(0);}
@@ -276,6 +295,8 @@ tbody tr:hover{background:var(--surface-2);}
   .form-grid{grid-template-columns:1fr;}
 }
 </style>
+</head>
+<body>
 
 <div id="app"></div>
 <div id="toastWrap" class="toast-wrap"></div>
@@ -1326,14 +1347,13 @@ function renderNow(){
 function renderSplash(msg){
   return '<div class="auth-wrap"><div class="auth-card">' +
     '<div class="auth-logo"><img src="'+LOGO_DATA_URI+'" alt="logo"></div>' +
-    '<div class="auth-eyebrow">'+esc(state.settings.companyTagline||"Procurement & Inventory System")+'</div>' +
+    '<h2 class="auth-title">'+esc(state.settings.companyName||"DECRR Interio")+'</h2>' +
     '<div class="auth-splash-msg">'+esc(msg)+'</div>' +
   '</div></div>';
 }
 function renderLoginScreen(){
   return '<div class="auth-wrap"><div class="auth-card">' +
     '<div class="auth-logo"><img src="'+LOGO_DATA_URI+'" alt="logo"></div>' +
-    '<div class="auth-eyebrow">'+esc(state.settings.companyTagline||"Procurement & Inventory System")+'</div>' +
     '<h2 class="auth-title">'+esc(state.settings.companyName||"DECRR Interio")+'</h2>' +
     '<div class="auth-sub">Sign in to continue</div>' +
     (state.authError? '<div class="auth-error">'+esc(state.authError)+'</div>' : '') +
@@ -1342,7 +1362,7 @@ function renderLoginScreen(){
       '<div class="field"><label for="loginPassword">Password</label><input id="loginPassword" type="password" autocomplete="current-password" placeholder="••••••••" required></div>' +
       '<button type="submit" class="btn btn-primary" style="width:100%;margin-top:22px;justify-content:center;" '+(state.authBusy?"disabled":"")+'>'+(state.authBusy?"Signing in…":"Sign In")+'</button>' +
     '</form>' +
-    '<div class="auth-status"><span class="dot"></span>Systems Nominal</div>' +
+    '<div class="auth-foot"><a href="https://claude.ai/code/artifact/c64d7e81-d256-4a26-8c68-4aef4c5af014" target="_blank" rel="noopener">'+esc((state.settings.companyName||"DECRR Interio"))+'</a></div>' +
   '</div></div>';
 }
 function renderSidebar(activeId){
@@ -2663,6 +2683,17 @@ function exportReportCsv(reportKey){
 function tickClock(){ var c = document.querySelector(".clock"); if(c){ var now=new Date(); c.textContent = now.toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"}) + " · " + now.toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"}); } }
 setInterval(tickClock, 30000);
 
+var __reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+if(!__reduceMotion){
+  document.addEventListener("mousemove", function(e){
+    var w = document.querySelector(".auth-wrap");
+    if(!w) return;
+    var r = w.getBoundingClientRect();
+    w.style.setProperty("--amx", ((e.clientX - r.left) / r.width * 100) + "%");
+    w.style.setProperty("--amy", ((e.clientY - r.top) / r.height * 100) + "%");
+  }, {passive:true});
+}
+
 window.App = { closeNav: function(){ state.ui.navOpen=false; render(); }, logout: function(){ doLogout(); } };
 
 render();
@@ -2670,3 +2701,5 @@ initApp();
 
 })();
 </script>
+</body>
+</html>
