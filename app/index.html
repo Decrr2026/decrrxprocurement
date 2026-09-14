@@ -688,7 +688,7 @@ function initApp(){
     if(session){ onAuthed(session); } else { render(); }
   }).catch(function(){ state.authReady = true; render(); });
   supa.auth.onAuthStateChange(function(event, session){
-    if(event==="SIGNED_IN" && session){ onAuthed(session); }
+    if(event==="SIGNED_IN" && session){ var sameUser = state.session && state.session.user && session.user && state.session.user.id === session.user.id; if(sameUser && state.dataLoaded){ state.session = session; return; } onAuthed(session); }
     else if(event==="SIGNED_OUT"){
       state.session = null; state.dataLoaded = false;
       if(realtimeChannel){ supa.removeChannel(realtimeChannel); realtimeChannel = null; }
