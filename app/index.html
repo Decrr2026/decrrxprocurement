@@ -868,8 +868,7 @@ function wireRealtime(){
   if(realtimeChannel) return;
   var reload = debounce(function(){
     loadAllData().then(render).catch(function(err){ console.error("Realtime reload failed", err); });
-  }, 500);
-  realtimeChannel = supa.channel("db-changes")
+}, 500); realtimeChannel = supa.channel("db-changes")
     .on("postgres_changes", {event:"*", schema:"public", table:"materials"}, reload)
     .on("postgres_changes", {event:"*", schema:"public", table:"vendors"}, reload)
     .on("postgres_changes", {event:"*", schema:"public", table:"purchase_orders"}, reload)
@@ -881,7 +880,7 @@ function wireRealtime(){
     .subscribe();
 }
 
-/* ============================= mutations ============================= */
+var DRAFT_FORMS=["vendor","material","bill-full","payment-full","quick-add-vendor"];function draftKeyFor(k){return "decrrDraft_"+k;}function isDraftableForm(f){if(!f)return false;var k=f.getAttribute("data-form");if(DRAFT_FORMS.indexOf(k)===-1)return false;return !f.getAttribute("data-id");}function saveDraftFromForm(f){try{var k=f.getAttribute("data-form");var d={};var els=f.querySelectorAll("[name]");for(var i=0;i<els.length;i++){d[els[i].name]=els[i].value;}localStorage.setItem(draftKeyFor(k),JSON.stringify(d));}catch(e){}}function clearDraft(k){try{localStorage.removeItem(draftKeyFor(k));}catch(e){}}function restoreDraftInto(f){try{var k=f.getAttribute("data-form");var raw=localStorage.getItem(draftKeyFor(k));if(!raw)return;var d=JSON.parse(raw);var any=false;Object.keys(d).forEach(function(name){var el=f.querySelector('[name="'+name+'"]');if(el && !el.value && d[name]){el.value=d[name];any=true;}});if(any)toast("Restored your unsaved draft for this form.");}catch(e){}}function restoreOpenFormDrafts(){DRAFT_FORMS.forEach(function(k){var f=app.querySelector('form[data-form="'+k+'"]');if(f && !f.getAttribute("data-id"))restoreDraftInto(f);});} /* ============================= mutations ============================= */
 function upsertMaterial(id, payload){
   var isNew = !id;
   var finalId = id || uid("m"); clearDraft("material");
