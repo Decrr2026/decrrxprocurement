@@ -884,7 +884,7 @@ function wireRealtime(){
 /* ============================= mutations ============================= */
 function upsertMaterial(id, payload){
   var isNew = !id;
-  var finalId = id || uid("m");
+  var finalId = id || uid("m"); clearDraft("material");
   var existing = materialById(finalId) || {};
   var data = Object.assign({id:finalId}, existing, payload);
   persist("materials", finalId, data).then(function(){
@@ -903,7 +903,7 @@ function deleteMaterial(id){
 }
 function upsertVendor(id, payload){
   var isNew = !id;
-  var finalId = id || uid("v");
+  var finalId = id || uid("v"); clearDraft("vendor");
   var existing = state.vendors.filter(function(v){return v.id===finalId;})[0] || {};
   var data = Object.assign({id:finalId}, existing, payload);
   persist("vendors", finalId, data).then(function(){ toast(isNew?"Vendor added.":"Vendor updated."); if(!state.db) render(); });
@@ -912,7 +912,7 @@ function upsertVendor(id, payload){
 // and hand back its id so the caller can select it immediately, without leaving the PO screen.
 function quickAddVendor(payload){
   if(!payload.name || !payload.name.trim()){ toast("Enter a vendor name.","danger"); return Promise.resolve(null); }
-  var id = uid("v");
+  var id = uid("v"); clearDraft("quick-add-vendor");
   var data = { id:id, name:payload.name.trim(), contact:(payload.contact||"").trim(), phone:(payload.phone||"").trim(), email:"", address:"", gstin:"", creditPeriodDays:num(payload.creditPeriodDays,30) };
   return persist("vendors", id, data).then(function(){ toast("Vendor added."); return id; }).catch(function(){ return null; });
 }
@@ -930,7 +930,7 @@ function upsertBill(id, payload){
   if(!(num(payload.amount,0)>0)){ toast("Enter a bill amount greater than 0.","danger"); return; }
   if(!payload.vendorId){ toast("Select a vendor for this bill.","danger"); return; }
   var isNew = !id;
-  var finalId = id || uid("bill");
+  var finalId = id || uid("bill"); clearDraft("bill-full");
   var existing = state.bills.filter(function(b){return b.id===finalId;})[0] || {};
   var data = Object.assign({id:finalId}, existing, payload);
   persist("bills", finalId, data).then(function(){ toast(isNew?"Bill added.":"Bill updated."); if(!state.db) render(); });
@@ -939,7 +939,7 @@ function upsertPayment(id, payload){
   if(!(num(payload.amount,0)>0)){ toast("Enter a payment amount greater than 0.","danger"); return; }
   if(!payload.vendorId){ toast("Select a vendor for this payment.","danger"); return; }
   var isNew = !id;
-  var finalId = id || uid("pay");
+  var finalId = id || uid("pay"); clearDraft("payment-full");
   var existing = state.payments.filter(function(p){return p.id===finalId;})[0] || {};
   var data = Object.assign({id:finalId}, existing, payload);
   persist("payments", finalId, data).then(function(){ toast(isNew?"Payment added.":"Payment updated."); if(!state.db) render(); });
@@ -1341,7 +1341,7 @@ function renderNow(){
       '</div>' +
     '</div>' +
     renderModal();
-  bindGlobalHandlers();
+  bindGlobalHandlers(); restoreOpenFormDrafts();
 }
 
 function renderSplash(msg){
@@ -2366,7 +2366,7 @@ function vendorLedgerBody(vendorId){
 /* ============================= event handling ============================= */
 function readEntry(id){ var el=document.getElementById(id); return el? el.value : ""; }
 
-function bindGlobalHandlers(){
+function bindGlobalHandlers(){ app.onreset = function(e){ var form = e.target.closest ? e.target.closest('form[data-form]') : null; if(form && isDraftableForm(form)) clearDraft(form.getAttribute('data-form')); };
   app.onclick = function(e){
     var t = e.target.closest("[data-action]");
     if(!t){
@@ -2547,7 +2547,7 @@ function bindGlobalHandlers(){
     }
   };
 
-  app.oninput = function(e){
+  app.oninput = function(e){ var draftForm = e.target.closest ? e.target.closest('form[data-form]') : null; if(draftForm && isDraftableForm(draftForm)) saveDraftFromForm(draftForm);
     var el = e.target;
     switch(el.id){
       case "dashSearch": state.ui.dashboard.search = el.value; refreshContainer("dashboard"); return;
@@ -2569,7 +2569,7 @@ function bindGlobalHandlers(){
       return;
     }
   };
-  app.onchange = function(e){
+  app.onchange = function(e){ var draftForm = e.target.closest ? e.target.closest('form[data-form]') : null; if(draftForm && isDraftableForm(draftForm)) saveDraftFromForm(draftForm);
     var el = e.target;
     switch(el.id){
       case "matTypeFilter": state.ui.materials.typeFilter = el.value; refreshMaterialList(); return;
