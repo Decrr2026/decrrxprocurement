@@ -996,8 +996,8 @@ function generatePoPdfBlob(po){
     doc.text("PO No.  "+po.poNumber, pageWidth-margin, 56, {align:"right"});
     doc.text("Date  "+fmtDate(po.date), pageWidth-margin, 69, {align:"right"});
     doc.text("Status  "+po.status, pageWidth-margin, 82, {align:"right"});
-    doc.setDrawColor(225); doc.line(margin, 96, pageWidth-margin, 96);
-    return 96;
+    var infoY = 82; if(po.siteId){ infoY = 95; doc.text("Site  "+po.siteId, pageWidth-margin, infoY, {align:"right"}); } doc.setDrawColor(225); doc.line(margin, infoY+14, pageWidth-margin, infoY+14);
+    return infoY+14;
   }
   function drawFooter(){
     doc.setDrawColor(230); doc.line(margin, pageHeight-40, pageWidth-margin, pageHeight-40);
@@ -1043,7 +1043,7 @@ function generatePoPdfBlob(po){
     else if(c.align==="center"){ tx = x+c.width/2; align = "center"; }
     var blockH = lines.length*lineH;
     var startY = rowY + (rowH-blockH)/2 + lineH - 2;
-    lines.forEach(function(ln,li){ doc.text(ln, tx, startY+li*lineH, {align:align}); });
+    lines.forEach(function(ln,li){ doc.text(ln, tx, startY+li*lineH, {align:align}); }); } function drawMaterialCell(nameLines, descLines, rowY, rowH){ var x = colX(0), tx = x+cellPad; var blockH = (nameLines.length+descLines.length)*lineH; var startY = rowY + (rowH-blockH)/2 + lineH - 2; doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(30,34,58); nameLines.forEach(function(ln,li){ doc.text(ln, tx, startY+li*lineH); }); if(descLines.length){ doc.setFontSize(7.5); doc.setTextColor(130,136,155); descLines.forEach(function(ln,di){ doc.text(ln, tx, startY+(nameLines.length+di)*lineH); }); } doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(30,34,58);
   }
   function drawHeaderRow(rowY){
     doc.setFillColor(47,111,237);
@@ -1825,7 +1825,7 @@ function pagePOs(){
         '</div>' +
       '</div>' +
       '<div class="field"><label for="poDate">Date <span class="req">*</span></label><input id="poDate" type="date" value="'+esc(builder.date)+'"></div>' +
-      '<div class="field"><label for="poSite">Issue / Delivery Site</label><select id="poSite"><option value="" '+(builder.siteId?"":"selected")+'>No specific site</option>'+(state.settings.sites||[]).map(function(s){return '<option value="'+esc(s)+'" '+(builder.siteId===s?"selected":"")+'>'+esc(s)+'</option>';}).join("")+'</select></div>' +
+      '<div class="field"><label for="poSite">Issue / Delivery Site</label><input id="poSite" type="text" placeholder="e.g. Lucknow Site" value="'+esc(builder.siteId||"")+'"></div>' +
     '</div>' +
     '<div class="table-wrap po-items-table" style="margin-top:14px;"><table><thead><tr><th>Material</th><th>Qty</th><th>Rate</th><th>GST %</th><th class="right">Amount (incl. GST)</th><th>Remarks</th><th></th></tr></thead><tbody id="poItemsBody">'+itemRows+'</tbody></table></div>' +
     '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-top:12px;">' +
