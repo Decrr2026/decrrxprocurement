@@ -1064,14 +1064,14 @@ function generatePoPdfBlob(po){
   doc.setFont("helvetica","normal"); doc.setFontSize(9);
   po.items.forEach(function(it, idx){
     var m = materialById(it.materialId);
-    var materialLines = wrapped(it.materialName||"—", 0);
+    var materialLines = wrapped(it.materialName||"—", 0); var descLines = (m && m.description) ? wrapped(m.description, 0) : [];
     var remarkLines = wrapped(it.remark||"—", 7);
-    var rowH = Math.max(24, Math.max(materialLines.length, remarkLines.length)*lineH + 10);
+    var materialBlockLines = materialLines.length + descLines.length; var rowH = Math.max(24, Math.max(materialBlockLines, remarkLines.length)*lineH + 10);
     if(y + rowH > bottomLimit) startNewPage();
     if(idx%2===1){ doc.setFillColor(245,246,250); doc.rect(margin, y, tableWidth, rowH, "F"); }
     var taxable = num(it.qty,0)*num(it.rate,0);
     doc.setTextColor(30,34,58);
-    drawCellLines(materialLines, 0, y, rowH);
+    drawMaterialCell(materialLines, descLines, y, rowH);
     drawCellLines([m?m.uom:""], 1, y, rowH);
     drawCellLines([fmtNum(it.qty)], 2, y, rowH);
     drawCellLines([fmtCurrencyPdf(it.rate)], 3, y, rowH);
