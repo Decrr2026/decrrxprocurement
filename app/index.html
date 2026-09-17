@@ -568,7 +568,7 @@ function vendorLedgerEntries(vendorId){
 }
 // Walks bills oldest-first, applying total payments FIFO, to find the oldest bill that is not yet
 // fully covered — that bill's due date drives the vendor's Overdue / Due Soon status.
-function vendorOldestUnpaidBill(vendorId){
+function vendorUnpaidBills(vendorId){ var bills = vendorBills(vendorId).slice().sort(function(a,b){return (a.billDate||"").localeCompare(b.billDate||"");}); var pool = vendorTotalPaid(vendorId); var unpaid = []; for(var i=0;i<bills.length;i++){ var amt = num(bills[i].amount,0); if(pool >= amt - 0.004){ pool -= amt; continue; } unpaid.push({bill:bills[i], remaining:round2(amt-pool)}); pool = 0; } return unpaid; } function vendorOverdueAmount(vendorId){ var vendor = vendorById(vendorId); var creditDays = vendor ? num(vendor.creditPeriodDays,30) : 30; var today = todayISO(); var total = 0; vendorUnpaidBills(vendorId).forEach(function(u){ var due = addDaysISO(u.bill.billDate, creditDays); if(due <= today) total += u.remaining; }); return round2(total); } function vendorOldestUnpaidBill(vendorId){
   var bills = vendorBills(vendorId).slice().sort(function(a,b){return (a.billDate||"").localeCompare(b.billDate||"");});
   var pool = vendorTotalPaid(vendorId);
   for(var i=0;i<bills.length;i++){
@@ -597,15 +597,15 @@ function vendorDaysOverdue(vendorId){
 function vendorPayableSummary(vendorId){
   var balanceDue = vendorBalanceDue(vendorId);
   var billCount = vendorBills(vendorId).length;
-  if(balanceDue<=0.004) return {balanceDue:0, dueDate:"", daysOverdue:null, tone:"green", label:"Paid Up", billCount:billCount};
+  if(balanceDue<=0.004) return {balanceDue:0, overdueAmount:0, dueDate:"", daysOverdue:null, tone:"green", label:"Paid Up", billCount:billCount};
   var dueDate = vendorDueDate(vendorId);
-  var daysOverdue = vendorDaysOverdue(vendorId);
+  var daysOverdue = vendorDaysOverdue(vendorId); var overdueAmount = vendorOverdueAmount(vendorId);
   var stopDays = num(state.settings.supplyStopDays,60);
   var mailDays = num(state.settings.mailReminderDays,21);
   var tone="blue", label="Supply Continue";
   if(daysOverdue!==null && daysOverdue>stopDays){ tone="red"; label="Badly Overdue — Supply Stop"; }
   else if(daysOverdue!==null && daysOverdue>=mailDays){ tone="amber"; label="Overdue — Please Mail"; }
-  return {balanceDue:balanceDue, dueDate:dueDate, daysOverdue:daysOverdue, tone:tone, label:label, billCount:billCount};
+  return {balanceDue:balanceDue, overdueAmount:overdueAmount, dueDate:dueDate, daysOverdue:daysOverdue, tone:tone, label:label, billCount:billCount};
 }
 function addBill(poId, vendorId, billNumber, billDate, amount, remark){
   if(!(amount>0)){ toast("Enter a bill amount greater than 0.","danger"); return Promise.resolve(false); }
@@ -1648,7 +1648,7 @@ function renderVendorList(){
       '<td class="cell-muted">'+esc(v.phone||"—")+'<br>'+esc(v.email||"")+'</td>' +
       '<td class="center num">'+fmtNum(v.creditPeriodDays!==undefined?v.creditPeriodDays:30)+' days</td>' +
       '<td class="center">'+poCount+'</td>' +
-      '<td class="right num">'+(pay.balanceDue>0?('<b>'+fmtCurrency(pay.balanceDue)+'</b>'):('<span class="cell-muted">'+fmtCurrency(0)+'</span>'))+'</td>' +
+      '<td class="right num">'+(pay.balanceDue>0?('<b>'+fmtCurrency(pay.balanceDue)+'</b>'):('<span class="cell-muted">'+fmtCurrency(0)+'</span>'))+'</td>' + '<td class="right num">'+(pay.overdueAmount>0?('<b style="color:var(--danger);">'+fmtCurrency(pay.overdueAmount)+'</b>'):('<span class="cell-muted">'+fmtCurrency(0)+'</span>'))+'</td>' +
       '<td class="cell-muted">'+(pay.dueDate?fmtDate(pay.dueDate):"—")+'</td>' +
       '<td>'+statusBadge(pay.tone,pay.label)+'</td>' +
       '<td class="right"><div style="display:flex;gap:6px;justify-content:flex-end;">' +
@@ -1658,7 +1658,7 @@ function renderVendorList(){
       '</div></td>' +
     '</tr>';
   }).join("");
-  return '<div class="table-wrap"><table><thead><tr><th>S.No</th><th>Vendor</th><th>Contact</th><th>Phone / Email</th><th class="center">Credit Period</th><th class="center">POs</th><th class="right">Balance Due</th><th>Due Date</th><th>Status</th><th></th></tr></thead><tbody>'+body+'</tbody></table></div>';
+  return '<div class="table-wrap"><table><thead><tr><th>S.No</th><th>Vendor</th><th>Contact</th><th>Phone / Email</th><th class="center">Credit Period</th><th class="center">POs</th><th class="right">Balance Due</th><th class="right">Overdue Amount</th><th>Due Date</th><th>Status</th><th></th></tr></thead><tbody>'+body+'</tbody></table></div>';
 }
 
 /* ============================= PAGE: vendor bills & payments ============================= */
@@ -2315,9 +2315,9 @@ function poViewBody(poId){
 function vendorLedgerBody(vendorId){
   var vendor = vendorById(vendorId); if(!vendor) return emptyState("Vendor not found.");
   var summary = vendorPayableSummary(vendorId);
-  var entries = vendorLedgerEntries(vendorId);
+  var entries = vendorLedgerEntries(vendorId); var ledgerCreditDays = num(vendor.creditPeriodDays,30); var ledgerToday = todayISO(); var unpaidBillMap = {}; vendorUnpaidBills(vendorId).forEach(function(u){ unpaidBillMap[u.bill.id] = u.remaining; });
   var rows = entries.slice().reverse().map(function(e){
-    var typeCell = (e.kind==="bill"?"Tax Invoice":"Payment") + (e.remark? (' <div class="cell-muted" style="font-size:11.5px;">'+esc(e.remark)+'</div>') : "");
+    var typeCell = (e.kind==="bill"?"Tax Invoice":"Payment") + (e.remark? (' <div class="cell-muted" style="font-size:11.5px;">'+esc(e.remark)+'</div>') : ""); if(e.kind==="bill" && unpaidBillMap.hasOwnProperty(e.id)){ var billDue = addDaysISO(e.date, ledgerCreditDays); var billDaysOver = Math.round((new Date(ledgerToday+"T00:00:00") - new Date(billDue+"T00:00:00")) / 86400000); typeCell += billDaysOver>0 ? (' <span class="badge red" style="margin-left:4px;">Overdue '+billDaysOver+'d &middot; '+fmtCurrency(unpaidBillMap[e.id])+'</span>') : (' <span class="badge grey" style="margin-left:4px;">Due '+fmtDate(billDue)+'</span>'); }
     var invCell = e.kind==="bill" ? esc(e.billNumber||"—") : "—";
     var delAction = e.kind==="bill" ? "delete-bill" : "delete-payment";
     var editAction = e.kind==="bill" ? "edit-bill" : "edit-payment";
@@ -2330,9 +2330,9 @@ function vendorLedgerBody(vendorId){
         '<button class="iconbtn danger" title="Delete" data-action="'+delAction+'" data-id="'+e.id+'">&#128465;</button>' +
       '</div></td></tr>';
   }).join("");
-  return '<div class="grid" style="grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:14px;">' +
+  return '<div class="grid" style="grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px;">' +
       statTile("Credit Period", fmtNum(vendor.creditPeriodDays!==undefined?vendor.creditPeriodDays:30)+" days") +
-      statTile("Balance Due", fmtCurrency(summary.balanceDue)) +
+      statTile("Balance Due", fmtCurrency(summary.balanceDue)) + statTile("Overdue Amount", fmtCurrency(summary.overdueAmount||0)) +
     '</div>' +
     '<div class="stat-line" style="margin-bottom:14px;"><span>Status</span>'+statusBadge(summary.tone,summary.label)+(summary.dueDate?(' <span class="cell-muted" style="margin-left:8px;">Due '+fmtDate(summary.dueDate)+(summary.daysOverdue>0?(' &middot; '+summary.daysOverdue+' day'+(summary.daysOverdue===1?"":"s")+' overdue'):(summary.daysOverdue<0?(' &middot; due in '+(-summary.daysOverdue)+' day'+(summary.daysOverdue===-1?"":"s")):''))+'</span>'):'')+'</div>' +
     '<h4 style="margin-bottom:8px;font-size:13px;">Ledger — Bills (debit) &amp; Payments (credit)</h4>' +
