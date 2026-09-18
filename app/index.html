@@ -749,7 +749,7 @@ function toSnakeRow(kind, obj){
     return { id:obj.id, vendor_id:obj.vendorId||null, amount:num(obj.amount,0), date:obj.date||null, remark:obj.remark||"" };
   }
   if(kind==="bills"){
-    return { id:obj.id, po_id:obj.poId||null, vendor_id:obj.vendorId||null, bill_number:obj.billNumber||"", bill_date:obj.billDate||null, amount:num(obj.amount,0), remark:obj.remark||"" };
+    return { id:obj.id, po_id:obj.poId||null, vendor_id:obj.vendorId||null, bill_number:obj.billNumber||"", bill_date:obj.billDate||null, amount:num(obj.amount,0), remark:obj.remark||"", issue_place:obj.issuePlace||"", ordered_by:obj.orderedBy||"" };
   }
   return obj;
 }
@@ -773,7 +773,7 @@ function fromSnakeRow(kind, row){
     return { id:row.id, vendorId:row.vendor_id||"", amount:num(row.amount,0), date:row.date||"", remark:row.remark||"", createdAt:row.created_at||"" };
   }
   if(kind==="bills"){
-    return { id:row.id, poId:row.po_id||"", vendorId:row.vendor_id||"", billNumber:row.bill_number||"", billDate:row.bill_date||"", amount:num(row.amount,0), remark:row.remark||"", createdAt:row.created_at||"" };
+    return { id:row.id, poId:row.po_id||"", vendorId:row.vendor_id||"", billNumber:row.bill_number||"", billDate:row.bill_date||"", amount:num(row.amount,0), remark:row.remark||"", issuePlace:row.issue_place||"", orderedBy:row.ordered_by||"", createdAt:row.created_at||"" };
   }
   return row;
 }
@@ -1674,14 +1674,14 @@ function poOptionsHtml(selectedId){
   return opts;
 }
 function billFormHtml(editing){
-  var b = editing || {vendorId:"", poId:"", billDate:todayISO(), billNumber:"", amount:"", remark:""};
+  var b = editing || {vendorId:"", poId:"", billDate:todayISO(), billNumber:"", amount:"", remark:"", issuePlace:"", orderedBy:""};
   return '<form novalidate data-form="bill-full" data-id="'+(editing?editing.id:"")+'">' +
     '<div class="form-grid">' +
       '<div class="field"><label for="bfVendor">Vendor <span class="req">*</span></label><select id="bfVendor" name="vendorId" required><option value="" disabled '+(b.vendorId?"":"selected")+'>Select vendor</option>'+vendorOptionsHtml(b.vendorId)+'</select></div>' +
       '<div class="field"><label for="bfPo">Related PO (Optional)</label><select id="bfPo" name="poId">'+poOptionsHtml(b.poId)+'</select></div>' +
       '<div class="field"><label for="bfDate">Invoice (Bill) Date <span class="req">*</span></label><input id="bfDate" name="billDate" type="date" required value="'+esc(b.billDate)+'"></div>' +
       '<div class="field"><label for="bfNumber">Invoice / Bill No.</label><input id="bfNumber" name="billNumber" placeholder="e.g. INV-1042" value="'+esc(b.billNumber)+'"></div>' +
-      '<div class="field"><label for="bfAmount">Amount <span class="req">*</span></label><input id="bfAmount" name="amount" type="number" min="0" step="any" required placeholder="0.00" value="'+esc(b.amount)+'"></div>' +
+      '<div class="field"><label for="bfAmount">Amount <span class="req">*</span></label><input id="bfAmount" name="amount" type="number" min="0" step="any" required placeholder="0.00" value="'+esc(b.amount)+'"></div>' + '<div class="field"><label for="bfIssuePlace">Bill Issue Place</label><input id="bfIssuePlace" name="issuePlace" placeholder="e.g. Site name / location" value="'+esc(b.issuePlace||"")+'"></div>' + '<div class="field"><label for="bfOrderedBy">Order Placed By</label><input id="bfOrderedBy" name="orderedBy" placeholder="Person who placed the order" value="'+esc(b.orderedBy||"")+'"></div>' +
       '<div class="field"><label for="bfRemark">Remark</label><input id="bfRemark" name="remark" placeholder="Optional" value="'+esc(b.remark||"")+'"></div>' +
     '</div>' +
     '<div style="display:flex;gap:10px;margin-top:14px;">' +
@@ -1727,7 +1727,7 @@ function renderBillsList(){
   var ui = state.ui.bills;
   var q = ui.search.toLowerCase();
   var rows = state.bills.filter(function(b){
-    return !q || vendorName(b.vendorId).toLowerCase().indexOf(q)>-1 || (b.billNumber||"").toLowerCase().indexOf(q)>-1 || (b.remark||"").toLowerCase().indexOf(q)>-1;
+    return !q || vendorName(b.vendorId).toLowerCase().indexOf(q)>-1 || (b.billNumber||"").toLowerCase().indexOf(q)>-1 || (b.remark||"").toLowerCase().indexOf(q)>-1 || (b.issuePlace||"").toLowerCase().indexOf(q)>-1 || (b.orderedBy||"").toLowerCase().indexOf(q)>-1;
   }).slice().sort(function(a,b){return (b.billDate||"").localeCompare(a.billDate||"");});
   if(!rows.length) return emptyState("No bills recorded yet.","&#129534;");
   var body = rows.map(function(b,i){
@@ -1738,7 +1738,7 @@ function renderBillsList(){
       '<td><b>'+esc(vendorName(b.vendorId))+'</b></td>' +
       '<td class="cell-muted">'+esc(b.billNumber||"—")+'</td>' +
       '<td class="right num"><b>'+fmtCurrency(b.amount)+'</b></td>' +
-      '<td class="cell-muted">'+(po?esc(po.poNumber):"—")+'</td>' +
+      '<td class="cell-muted">'+(po?esc(po.poNumber):"—")+'</td>' + '<td class="cell-muted">'+esc(b.issuePlace||"—")+'</td>' + '<td class="cell-muted">'+esc(b.orderedBy||"—")+'</td>' +
       '<td class="cell-muted">'+esc(b.remark||"—")+'</td>' +
       '<td class="right"><div style="display:flex;gap:6px;justify-content:flex-end;">' +
         '<button class="iconbtn" title="Edit" data-action="edit-bill" data-id="'+b.id+'">&#9998;</button>' +
@@ -1746,7 +1746,7 @@ function renderBillsList(){
       '</div></td>' +
     '</tr>';
   }).join("");
-  return '<div class="table-wrap"><table><thead><tr><th>S.No</th><th>Invoice Date</th><th>Vendor</th><th>Invoice No.</th><th class="right">Amount</th><th>Related PO</th><th>Remark</th><th></th></tr></thead><tbody>'+body+'</tbody></table></div>';
+  return '<div class="table-wrap"><table><thead><tr><th>S.No</th><th>Invoice Date</th><th>Vendor</th><th>Invoice No.</th><th class="right">Amount</th><th>Related PO</th><th>Issue Place</th><th>Ordered By</th><th>Remark</th><th></th></tr></thead><tbody>'+body+'</tbody></table></div>';
 }
 function renderPaymentsList(){
   var ui = state.ui.bills;
@@ -2521,7 +2521,7 @@ function bindGlobalHandlers(){ app.onreset = function(e){ var form = e.target.cl
       recordPayment(payVendorId, num(readVal(form,"amount"),0), readVal(form,"date")||todayISO(), readVal(form,"remark")).then(function(ok){ if(ok) render(); });
     } else if(kind==="bill-full"){
       var fbId = form.getAttribute("data-id")||null;
-      var fbPayload = { vendorId:readVal(form,"vendorId"), poId:readVal(form,"poId")||"", billDate:readVal(form,"billDate")||todayISO(), billNumber:readVal(form,"billNumber").trim(), amount:num(readVal(form,"amount"),0), remark:readVal(form,"remark").trim() };
+      var fbPayload = { vendorId:readVal(form,"vendorId"), poId:readVal(form,"poId")||"", billDate:readVal(form,"billDate")||todayISO(), billNumber:readVal(form,"billNumber").trim(), amount:num(readVal(form,"amount"),0), issuePlace:readVal(form,"issuePlace").trim(), orderedBy:readVal(form,"orderedBy").trim(), remark:readVal(form,"remark").trim() };
       upsertBill(fbId, fbPayload);
       state.ui.bills.editingId = null; render();
     } else if(kind==="payment-full"){
