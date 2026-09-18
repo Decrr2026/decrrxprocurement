@@ -1791,7 +1791,248 @@ function renderPaymentsList(){
           actions: {
             type:"array",
             items: {
-  /* ============================= PAGE: purchase orders ============================= */
+              type:"object",
+            properties: {
+              type: {type:"string", enum:["create_vendor","update_vendor","create_bill","create_payment","create_material"]},
+              vendorId: {type:"string", description:"For update_vendor: the id of the existing vendor to update, copied exactly from the vendor list you were given. For create_bill/create_payment: the id of the existing vendor this belongs to, ONLY when you are confident it matches one already in the list."},
+              vendorName: {type:"string", description:"The vendor's name as it appears in the source. Required for create_vendor, and for create_bill/create_payment when vendorId is not known (a vendor not already in the list)."},
+              contact:{type:"string"}, phone:{type:"string"}, email:{type:"string"}, address:{type:"string"}, gstin:{type:"string"}, creditPeriodDays:{type:"number"},
+              billNumber:{type:"string"}, billDate:{type:"string", description:"YYYY-MM-DD"}, amount:{type:"number"}, issuePlace:{type:"string"}, orderedBy:{type:"string"}, remark:{type:"string"},
+              date:{type:"string", description:"YYYY-MM-DD — the payment date, for create_payment only"},
+              materialName:{type:"string"}, materialType:{type:"string"}, description:{type:"string"}, uom:{type:"string"}, siteRequirement:{type:"number"}, purchaseRate:{type:"number"},
+              note:{type:"string", description:"One short plain-English sentence explaining this action to the user, e.g. 'Matched to existing vendor Lavish Lighting' or 'New vendor not seen before'."},
+              confidence:{type:"string", enum:["high","medium","low"]}
+            },
+            required: ["type","note","confidence"]
+          }
+        }
+      },
+      required: ["summary","actions","questions"]
+    }
+  };
+}
+function aiSystemPrompt(){
+  return "You are a careful data-entry assistant inside \""+(state.settings.companyName||"DECRR Interio")+"\"'s procurement system. "+
+    "You read an uploaded document or screenshot (a vendor ledger, a tax invoice, a payment receipt, a materials list) and/or the user's typed request, and work out exactly which records should be created or updated.\n\n"+
+    "Existing vendors (id | name | GSTIN):\n"+aiVendorContext()+"\n\n"+
+    "Rules:\n"+
+    "- All dates must be YYYY-MM-DD.\n"+
+    "- Amounts and rates are plain numbers in INR — no currency symbols, no commas.\n"+
+    "- When a bill or payment clearly belongs to a vendor already in the list above, set vendorId to that vendor's exact id. Only omit vendorId (and set vendorName instead) when you're confident this vendor is not in the list.\n"+
+    "- Never invent numbers, dates or names you can't actually read or reasonably infer — if something is unclear, add a note explaining it, lower the confidence, or add a clarifying question instead of guessing.\n"+
+    "- Split a ledger or statement covering multiple bills/payments into one action per bill and one action per payment.\n"+
+    "- You must call the propose_actions tool exactly once with everything you found, even if that means an empty actions list.";
+}
+function normalizeAiActions(input){
+  var actions = (input.actions||[]).map(function(a,i){
+    var out = { clientId:"a"+i, type:a.type, include:true, note:a.note||"", confidence:a.confidence||"medium", fields:{} };
+    if(a.type==="create_vendor" || a.type==="update_vendor"){
+      var matchedId = (a.vendorId && vendorById(a.vendorId)) ? a.vendorId : "";
+      if(a.type==="update_vendor" && !matchedId){ out.type="create_vendor"; out.note = (out.note?out.note+" ":"")+"(No matching existing vendor found — will create as new.)"; }
+      out.targetId = out.type==="update_vendor" ? matchedId : "";
+      out.fields = { name:a.vendorName||(matchedId?vendorById(matchedId).name:""), contact:a.contact||"", phone:a.phone||"", email:a.email||"", address:a.address||"", gstin:a.gstin||"", creditPeriodDays:(a.creditPeriodDays!==undefined && a.creditPeriodDays!==null)?a.creditPeriodDays:"" };
+    } else if(a.type==="create_bill" || a.type==="create_payment"){
+      var vId = (a.vendorId && vendorById(a.vendorId)) ? a.vendorId : "";
+      out.vendorId = vId || "__new__";
+      out.vendorNewName = vId ? "" : (a.vendorName||"");
+      if(a.type==="create_bill"){
+        out.fields = { billNumber:a.billNumber||"", billDate:a.billDate||todayISO(), amount:(a.amount!==undefined?a.amount:""), issuePlace:a.issuePlace||"", orderedBy:a.orderedBy||"", remark:a.remark||"" };
+      } else {
+        out.fields = { date:a.date||todayISO(), amount:(a.amount!==undefined?a.amount:""), remark:a.remark||"" };
+      }
+    } else if(a.type==="create_material"){
+      out.fields = { name:a.materialName||"", type:a.materialType||"", description:a.description||"", uom:a.uom||"", siteRequirement:(a.siteRequirement!==undefined?a.siteRequirement:""), purchaseRate:(a.purchaseRate!==undefined?a.purchaseRate:"") };
+    } else {
+      out.include = false;
+    }
+    return out;
+  });
+  return { summary: input.summary||"", questions: input.questions||[], actions: actions };
+}
+function handleAiFileSelect(el){
+  var file = el.files && el.files[0];
+  if(!file) return;
+  if(file.size > 15*1024*1024){ toast("File is too large (max 15MB).","danger"); el.value=""; return; }
+  var reader = new FileReader();
+  reader.onload = function(){
+    var dataUrl = reader.result || "";
+    var comma = dataUrl.indexOf(",");
+    state.ui.ai.fileBase64 = comma>-1 ? dataUrl.slice(comma+1) : "";
+    state.ui.ai.fileMediaType = file.type || (/\.pdf$/i.test(file.name) ? "application/pdf" : "image/png");
+    state.ui.ai.fileName = file.name;
+    render();
+  };
+  reader.onerror = function(){ toast("Could not read that file.","danger"); };
+  reader.readAsDataURL(file);
+}
+function runAiAnalysis(){
+  var ui = state.ui.ai;
+  if(!ui.fileBase64 && !ui.textInput.trim()){ toast("Upload a file or type a request first.","danger"); return; }
+  var proxyUrl = (state.settings.aiProxyUrl||"").trim();
+  if(!proxyUrl){ toast("Add your AI Assistant proxy URL in Settings first.","danger"); return; }
+  ui.busy = true; ui.error = ""; render();
+  var contentBlocks = [];
+  if(ui.fileBase64){
+    if(ui.fileMediaType==="application/pdf") contentBlocks.push({type:"document", source:{type:"base64", media_type:"application/pdf", data:ui.fileBase64}});
+    else contentBlocks.push({type:"image", source:{type:"base64", media_type: ui.fileMediaType||"image/png", data: ui.fileBase64}});
+  }
+  contentBlocks.push({type:"text", text: ui.textInput.trim() || "Read the attached file and propose whatever vendor/bill/payment/material records should be added."});
+  var body = { model:"claude-sonnet-5", max_tokens:4000, system:aiSystemPrompt(), tools:[aiToolSchema()], tool_choice:{type:"tool", name:"propose_actions"}, messages:[{role:"user", content:contentBlocks}] };
+  fetch(proxyUrl, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)})
+    .then(function(res){ return res.json().then(function(j){ return {ok:res.ok, json:j}; }).catch(function(){ return {ok:false, json:null}; }); })
+    .then(function(r){
+      ui.busy = false;
+      if(!r.ok || !r.json){ ui.error = (r.json && r.json.error && (r.json.error.message||r.json.error)) || "The AI request failed."; render(); return; }
+      var toolUse = (r.json.content||[]).filter(function(b){return b.type==="tool_use" && b.name==="propose_actions";})[0];
+      if(!toolUse){ ui.error = "Claude didn't return a structured result — try rephrasing your request."; render(); return; }
+      ui.result = normalizeAiActions(toolUse.input || {});
+      render();
+    })
+    .catch(function(err){ ui.busy = false; ui.error = "Could not reach the AI proxy — check the proxy URL in Settings and your internet connection."; render(); });
+}
+function applyAiActions(){
+  var result = state.ui.ai.result; if(!result) return;
+  var included = result.actions.filter(function(a){return a.include;});
+  if(!included.length){ toast("Select at least one change to apply.","danger"); return; }
+  if(!confirmAction("Apply "+included.length+" change"+(included.length===1?"":"s")+" to your live data?")) return;
+  var newVendorIds = {};
+  included.forEach(function(a){
+    if((a.type==="create_bill"||a.type==="create_payment") && a.vendorId==="__new__"){
+      var key = (a.vendorNewName||"").trim().toLowerCase();
+      if(key && !newVendorIds[key]){
+        var vid = uid("v");
+        persist("vendors", vid, {id:vid, name:(a.vendorNewName||"").trim(), contact:"", phone:"", email:"", address:"", gstin:"", creditPeriodDays:30});
+        newVendorIds[key] = vid;
+      }
+      a.resolvedVendorId = key ? newVendorIds[key] : "";
+    } else if(a.type==="create_bill" || a.type==="create_payment"){
+      a.resolvedVendorId = a.vendorId;
+    }
+  });
+  var applied = 0;
+  included.forEach(function(a){
+    if(a.type==="create_vendor"){
+      if(!(a.fields.name||"").trim()) return;
+      var nvid = uid("v");
+      persist("vendors", nvid, { id:nvid, name:(a.fields.name||"").trim(), contact:a.fields.contact||"", phone:a.fields.phone||"", email:a.fields.email||"", address:a.fields.address||"", gstin:a.fields.gstin||"", creditPeriodDays:num(a.fields.creditPeriodDays,30) });
+      applied++;
+    } else if(a.type==="update_vendor" && a.targetId){
+      var existingV = vendorById(a.targetId);
+      if(existingV){
+        var patch = {};
+        ["name","contact","phone","email","address","gstin"].forEach(function(k){ if((a.fields[k]||"").toString().trim()!=="") patch[k]=a.fields[k].toString().trim(); });
+        if(a.fields.creditPeriodDays!=="" && a.fields.creditPeriodDays!==undefined && a.fields.creditPeriodDays!==null) patch.creditPeriodDays = num(a.fields.creditPeriodDays, existingV.creditPeriodDays);
+        persist("vendors", a.targetId, Object.assign({}, existingV, patch));
+        applied++;
+      }
+    } else if(a.type==="create_bill"){
+      if(!a.resolvedVendorId || !(num(a.fields.amount,0)>0)) return;
+      var bid = uid("bill");
+      persist("bills", bid, { id:bid, vendorId:a.resolvedVendorId, poId:"", billNumber:a.fields.billNumber||"", billDate:a.fields.billDate||todayISO(), amount:num(a.fields.amount,0), issuePlace:a.fields.issuePlace||"", orderedBy:a.fields.orderedBy||"", remark:a.fields.remark||"" });
+      applied++;
+    } else if(a.type==="create_payment"){
+      if(!a.resolvedVendorId || !(num(a.fields.amount,0)>0)) return;
+      var pid = uid("pay");
+      persist("payments", pid, { id:pid, vendorId:a.resolvedVendorId, date:a.fields.date||todayISO(), amount:num(a.fields.amount,0), remark:a.fields.remark||"" });
+      applied++;
+    } else if(a.type==="create_material"){
+      if(!(a.fields.name||"").trim()) return;
+      var mid = uid("m");
+      persist("materials", mid, { id:mid, name:(a.fields.name||"").trim(), type:a.fields.type||"", description:a.fields.description||"", uom:a.fields.uom||"", siteRequirement:num(a.fields.siteRequirement,0), purchaseRate:num(a.fields.purchaseRate,0), preferredVendorId:"" });
+      applied++;
+    }
+  });
+  toast("Applied "+applied+" AI-proposed change"+(applied===1?"":"s")+".");
+  state.ui.ai = {busy:false, error:"", textInput:"", fileName:"", fileBase64:"", fileMediaType:"", result:null};
+  render();
+}
+function confidenceBadge(c){ var tone = c==="high"?"green":(c==="low"?"red":"amber"); return statusBadge(tone, c.charAt(0).toUpperCase()+c.slice(1)+" confidence"); }
+function aiFieldInput(idx,key,label,type,value,extra){
+  return '<div class="field"><label for="aiField_'+idx+'_'+key+'">'+esc(label)+'</label><input id="aiField_'+idx+'_'+key+'" class="ai-action-field" data-idx="'+idx+'" data-field="'+key+'" type="'+(type||"text")+'" value="'+esc(value===undefined||value===null?"":value)+'" '+(extra||"")+'></div>';
+}
+function renderAiActionCard(a,idx){
+  if(!a) return "";
+  var titleMap = {create_vendor:"New Vendor", update_vendor:"Update Vendor", create_bill:"New Bill", create_payment:"New Payment", create_material:"New Material"};
+  var title = titleMap[a.type] || a.type;
+  var body = "";
+  if(a.type==="create_vendor" || a.type==="update_vendor"){
+    body = '<div class="form-grid">' +
+      aiFieldInput(idx,"name","Vendor Name","text",a.fields.name) +
+      aiFieldInput(idx,"contact","Contact Person","text",a.fields.contact) +
+      aiFieldInput(idx,"phone","Phone","text",a.fields.phone) +
+      aiFieldInput(idx,"email","Email","text",a.fields.email) +
+      aiFieldInput(idx,"gstin","GSTIN","text",a.fields.gstin) +
+      aiFieldInput(idx,"creditPeriodDays","Credit Period (Days)","number",a.fields.creditPeriodDays) +
+      aiFieldInput(idx,"address","Address","text",a.fields.address) +
+    '</div>';
+  } else if(a.type==="create_bill" || a.type==="create_payment"){
+    var vendorSelect = '<div class="field"><label for="aiVendor_'+idx+'">Vendor</label><select id="aiVendor_'+idx+'" class="ai-vendor-select" data-idx="'+idx+'">' +
+      state.vendors.map(function(v){return '<option value="'+v.id+'" '+(a.vendorId===v.id?"selected":"")+'>'+esc(v.name)+'</option>';}).join("") +
+      '<option value="__new__" '+(a.vendorId==="__new__"?"selected":"")+'>+ Create new vendor'+(a.vendorNewName?": "+esc(a.vendorNewName):"")+'</option>' +
+    '</select></div>';
+    var newNameField = a.vendorId==="__new__" ? aiFieldInput(idx,"__vendorNewName","New Vendor Name","text",a.vendorNewName) : "";
+    var typeFields = a.type==="create_bill" ?
+      ( aiFieldInput(idx,"billNumber","Invoice No.","text",a.fields.billNumber) +
+        aiFieldInput(idx,"billDate","Bill Date","date",a.fields.billDate) +
+        aiFieldInput(idx,"amount","Amount","number",a.fields.amount,'step="0.01"') +
+        aiFieldInput(idx,"issuePlace","Bill Issue Place","text",a.fields.issuePlace) +
+        aiFieldInput(idx,"orderedBy","Order Placed By","text",a.fields.orderedBy) +
+        aiFieldInput(idx,"remark","Remark","text",a.fields.remark) )
+      : ( aiFieldInput(idx,"date","Payment Date","date",a.fields.date) +
+          aiFieldInput(idx,"amount","Amount","number",a.fields.amount,'step="0.01"') +
+          aiFieldInput(idx,"remark","Remark","text",a.fields.remark) );
+    body = '<div class="form-grid">' + vendorSelect + newNameField + typeFields + '</div>';
+  } else if(a.type==="create_material"){
+    body = '<div class="form-grid">' +
+      aiFieldInput(idx,"name","Material Name","text",a.fields.name) +
+      aiFieldInput(idx,"type","Type","text",a.fields.type) +
+      aiFieldInput(idx,"uom","UOM","text",a.fields.uom) +
+      aiFieldInput(idx,"siteRequirement","Site Requirement","number",a.fields.siteRequirement) +
+      aiFieldInput(idx,"purchaseRate","Purchase Rate","number",a.fields.purchaseRate,'step="0.01"') +
+      aiFieldInput(idx,"description","Description","text",a.fields.description) +
+    '</div>';
+  }
+  return '<div class="card-pad" style="background:var(--surface-2);border-radius:9px;margin-bottom:12px;'+(a.include?"":"opacity:.55;")+'">' +
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;">' +
+      '<label style="display:flex;gap:8px;align-items:center;cursor:pointer;"><input type="checkbox" class="ai-action-include" data-idx="'+idx+'" '+(a.include?"checked":"")+'><b>'+esc(title)+'</b></label>' +
+      confidenceBadge(a.confidence) +
+    '</div>' +
+    (a.note? '<div class="cell-muted" style="margin:6px 0 10px;font-size:12.5px;">'+esc(a.note)+'</div>' : '') +
+    body +
+  '</div>';
+}
+function pageAI(){
+  var ui = state.ui.ai;
+  var proxyConfigured = !!(state.settings.aiProxyUrl||"").trim();
+  var uploadCard = '<div class="card card-pad">' +
+    '<div class="section-head"><div><h2>AI Assistant</h2><div class="hint">Upload a vendor ledger PDF, a screenshot of a bill or payment, or just type what you need. Claude reads it and proposes the exact vendor, bill, payment or material changes — nothing is saved until you review and approve below.</div></div></div>' +
+    (!proxyConfigured ? '<div class="auth-error" style="margin-bottom:12px;">Set your AI Assistant proxy URL in <b>Settings</b> before using this page.</div>' : '') +
+    (ui.error ? '<div class="auth-error" style="margin-bottom:12px;">'+esc(ui.error)+'</div>' : '') +
+    '<div class="field"><label for="aiTextInput">What do you need?</label><textarea id="aiTextInput" rows="3" placeholder="e.g. Add this ledger as bills and payments for Lavish Lighting, or describe changes in plain English…">'+esc(ui.textInput)+'</textarea></div>' +
+    '<div class="field"><label for="aiFileInput">Upload a screenshot or PDF (optional)</label><input type="file" id="aiFileInput" accept="image/*,.pdf">' +
+      (ui.fileName? '<div class="cell-muted" style="margin-top:6px;">&#128206; '+esc(ui.fileName)+' <button type="button" class="iconbtn" data-action="ai-clear-file" title="Remove file">&#10005;</button></div>' : '') +
+    '</div>' +
+    '<div style="display:flex;gap:10px;margin-top:10px;"><button class="btn btn-primary" data-action="ai-analyze" '+(ui.busy?"disabled":"")+'>'+(ui.busy?"Analyzing…":"&#10024; Analyze")+'</button>'+(ui.result?'<button class="btn btn-ghost" data-action="ai-discard-result">Start Over</button>':'')+'</div>' +
+  '</div>';
+
+  var resultCard = "";
+  if(ui.result){
+    var r = ui.result;
+    var qHtml = (r.questions && r.questions.length) ? ('<div class="cell-muted" style="margin-top:10px;"><b>Questions from the AI:</b><ul style="margin:6px 0 0 18px;">'+r.questions.map(function(q){return '<li>'+esc(q)+'</li>';}).join("")+'</ul></div>') : "";
+    var actionsHtml = r.actions.length ? r.actions.map(function(a,idx){return renderAiActionCard(a,idx);}).join("") : emptyState("No changes were proposed.","&#129302;");
+    var includedCount = r.actions.filter(function(a){return a.include;}).length;
+    resultCard = '<div class="card card-pad" style="margin-top:16px;">' +
+      '<div class="section-head"><h2>Proposed Changes</h2></div>' +
+      (r.summary? '<div class="cell-muted" style="margin-bottom:10px;">'+esc(r.summary)+'</div>' : "") +
+      qHtml +
+      '<div style="margin-top:14px;">'+actionsHtml+'</div>' +
+      (r.actions.length? '<div style="display:flex;gap:10px;margin-top:16px;"><button class="btn btn-primary" data-action="ai-apply-actions" '+(includedCount?"":"disabled")+'>&#10003; Apply '+includedCount+' Selected Change'+(includedCount===1?"":"s")+'</button></div>' : "") +
+    '</div>';
+  }
+  return uploadCard + resultCard;
+}
+
+/* ============================= PAGE: purchase orders ============================= */
 var GST_SLABS = [0,5,12,18,28];
 function ensureBuilder(prefillMaterialId){
   if(!state.ui.pos.builder){
