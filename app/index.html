@@ -836,23 +836,23 @@ function loadAllData(){
     supa.from("bills").select("*")
   ]).then(function(results){
     var matRes=results[0], venRes=results[1], poRes=results[2], itemsRes=results[3], txRes=results[4], setRes=results[5], payRes=results[6], billRes=results[7];
-    [matRes,venRes,poRes,itemsRes,txRes,setRes,payRes,billRes].forEach(function(r){ if(r && r.error) console.error(r.error); });
-    state.payments = (payRes.data||[]).map(function(r){ return fromSnakeRow("payments", r); });
-    state.bills = (billRes.data||[]).map(function(r){ return fromSnakeRow("bills", r); });
-    state.materials = (matRes.data||[]).map(function(r){ return fromSnakeRow("materials", r); });
-    state.vendors = (venRes.data||[]).map(function(r){ return fromSnakeRow("vendors", r); });
+    var failedLabels = []; [["materials",matRes],["vendors",venRes],["purchase orders",poRes],["PO items",itemsRes],["transactions",txRes],["settings",setRes],["payments",payRes],["bills",billRes]].forEach(function(pair){ var label=pair[0], r=pair[1]; if(r && r.error){ console.error(r.error); failedLabels.push(label); } });
+    if(!payRes.error) state.payments = (payRes.data||[]).map(function(r){ return fromSnakeRow("payments", r); });
+    if(!billRes.error) state.bills = (billRes.data||[]).map(function(r){ return fromSnakeRow("bills", r); });
+    if(!matRes.error) state.materials = (matRes.data||[]).map(function(r){ return fromSnakeRow("materials", r); });
+    if(!venRes.error) state.vendors = (venRes.data||[]).map(function(r){ return fromSnakeRow("vendors", r); });
     var itemsByPo = {};
-    (itemsRes.data||[]).forEach(function(it){
+    (itemsRes.error?[]:(itemsRes.data||[])).forEach(function(it){
       var arr = itemsByPo[it.po_id] || (itemsByPo[it.po_id]=[]);
       arr.push({ materialId: it.material_id||"", materialName: it.material_name||"", qty:num(it.qty,0), rate:num(it.rate,0), gstPct:num(it.gst_pct,18), receivedQty:num(it.received_qty,0), remark: it.remark||"" });
     });
-    state.purchaseOrders = (poRes.data||[]).map(function(r){
+    if(!poRes.error) state.purchaseOrders = (poRes.data||[]).map(function(r){
       var po = fromSnakeRow("purchaseOrders", r);
       po.items = itemsByPo[r.id] || [];
       return po;
     });
-    state.transactions = (txRes.data||[]).map(function(r){ return fromSnakeRow("transactions", r); });
-    if(setRes && setRes.data){
+    if(!txRes.error) state.transactions = (txRes.data||[]).map(function(r){ return fromSnakeRow("transactions", r); });
+    if(failedLabels.length){ toast("Could not refresh "+failedLabels.join(", ")+" — showing last known data.", "danger"); } if(setRes && setRes.data){
       var d = setRes.data;
       state.settings = Object.assign({}, state.settings, {
         companyName:d.company_name, companyTagline:d.company_tagline, currency:d.currency,
