@@ -553,7 +553,7 @@ function vendorBalanceDue(vendorId){ return round2(vendorTotalBilled(vendorId) -
 function vendorLedgerEntries(vendorId){
   var entries = [];
   vendorBills(vendorId).forEach(function(b){
-    entries.push({date:b.billDate, kind:"bill", id:b.id, ref:(b.billNumber?("Tax Invoice "+b.billNumber):"Bill"), billNumber:b.billNumber||"", poId:b.poId||"", remark:b.remark||"", debit:num(b.amount,0), credit:0, createdAt:b.createdAt||""});
+    entries.push({date:b.billDate, kind:"bill", id:b.id, ref:(b.billNumber?("Tax Invoice "+b.billNumber):"Bill"), billNumber:b.billNumber||"", poId:b.poId||"", issuePlace:b.issuePlace||"", orderedBy:b.orderedBy||"", remark:b.remark||"", debit:num(b.amount,0), credit:0, createdAt:b.createdAt||""});
   });
   vendorPayments(vendorId).forEach(function(p){
     entries.push({date:p.date, kind:"payment", id:p.id, ref:"Payment", poId:"", remark:p.remark||"", debit:0, credit:num(p.amount,0), createdAt:p.createdAt||""});
@@ -2318,10 +2318,10 @@ function vendorLedgerBody(vendorId){
   var entries = vendorLedgerEntries(vendorId); var ledgerCreditDays = num(vendor.creditPeriodDays,30); var ledgerToday = todayISO(); var unpaidBillMap = {}; vendorUnpaidBills(vendorId).forEach(function(u){ unpaidBillMap[u.bill.id] = u.remaining; });
   var rows = entries.slice().reverse().map(function(e){
     var typeCell = (e.kind==="bill"?"Tax Invoice":"Payment") + (e.remark? (' <div class="cell-muted" style="font-size:11.5px;">'+esc(e.remark)+'</div>') : ""); if(e.kind==="bill" && unpaidBillMap.hasOwnProperty(e.id)){ var billDue = addDaysISO(e.date, ledgerCreditDays); var billDaysOver = Math.round((new Date(ledgerToday+"T00:00:00") - new Date(billDue+"T00:00:00")) / 86400000); typeCell += billDaysOver>0 ? (' <span class="badge red" style="margin-left:4px;">Overdue '+billDaysOver+'d &middot; '+fmtCurrency(unpaidBillMap[e.id])+'</span>') : (' <span class="badge grey" style="margin-left:4px;">Due '+fmtDate(billDue)+'</span>'); }
-    var invCell = e.kind==="bill" ? esc(e.billNumber||"—") : "—";
+    var invCell = e.kind==="bill" ? esc(e.billNumber||"—") : "—"; var issuePlaceCell = e.kind==="bill" ? esc(e.issuePlace||"—") : "—"; var orderedByCell = e.kind==="bill" ? esc(e.orderedBy||"—") : "—";
     var delAction = e.kind==="bill" ? "delete-bill" : "delete-payment";
     var editAction = e.kind==="bill" ? "edit-bill" : "edit-payment";
-    return '<tr><td>'+fmtDate(e.date)+'</td><td>'+typeCell+'</td><td class="cell-muted">'+invCell+'</td>' +
+    return '<tr><td>'+fmtDate(e.date)+'</td><td>'+typeCell+'</td><td class="cell-muted">'+invCell+'</td>' + '<td class="cell-muted">'+issuePlaceCell+'</td><td class="cell-muted">'+orderedByCell+'</td>' +
       '<td class="right num">'+(e.debit>0?fmtCurrency(e.debit):'<span class="cell-muted">—</span>')+'</td>' +
       '<td class="right num">'+(e.credit>0?fmtCurrency(e.credit):'<span class="cell-muted">—</span>')+'</td>' +
       '<td class="right num"><b>'+fmtCurrency(e.balance)+'</b></td>' +
@@ -2337,7 +2337,7 @@ function vendorLedgerBody(vendorId){
     '<div class="stat-line" style="margin-bottom:14px;"><span>Status</span>'+statusBadge(summary.tone,summary.label)+(summary.dueDate?(' <span class="cell-muted" style="margin-left:8px;">Due '+fmtDate(summary.dueDate)+(summary.daysOverdue>0?(' &middot; '+summary.daysOverdue+' day'+(summary.daysOverdue===1?"":"s")+' overdue'):(summary.daysOverdue<0?(' &middot; due in '+(-summary.daysOverdue)+' day'+(summary.daysOverdue===-1?"":"s")):''))+'</span>'):'')+'</div>' +
     '<h4 style="margin-bottom:8px;font-size:13px;">Ledger — Bills (debit) &amp; Payments (credit)</h4>' +
     (entries.length ?
-      '<div class="table-wrap"><table><thead><tr><th>Date</th><th>Type</th><th>Invoice No.</th><th class="right">Debit</th><th class="right">Credit</th><th class="right">Balance</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'
+      '<div class="table-wrap"><table><thead><tr><th>Date</th><th>Type</th><th>Invoice No.</th><th>Issue Place</th><th>Ordered By</th><th class="right">Debit</th><th class="right">Credit</th><th class="right">Balance</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'
       : emptyState("No bills or payments recorded for this vendor yet.")) +
     '<div class="grid" style="grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;">' +
       '<div class="card-pad" style="background:var(--surface-2);border-radius:9px;">' +
