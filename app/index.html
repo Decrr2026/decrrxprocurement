@@ -1771,7 +1771,27 @@ function renderPaymentsList(){
   return '<div class="table-wrap"><table><thead><tr><th>S.No</th><th>Date</th><th>Vendor</th><th class="right">Amount</th><th>Remark</th><th></th></tr></thead><tbody>'+body+'</tbody></table></div>';
 }
 
-/* ============================= PAGE: purchase orders ============================= */
+/* ============================= PAGE: AI Assistant ============================= */
+  // Nothing here ever holds the Claude API key. The app POSTs to the proxy URL configured in
+  // Settings (a small Cloudflare Worker — see /cloudflare-worker/worker.js in the repo); the
+  // Worker attaches the key server-side. Every proposed change is shown for review here and
+  // only reaches the database when the user clicks "Apply" — see applyAiActions() below.
+  function aiVendorContext(){
+    return state.vendors.map(function(v){ return v.id+" | "+v.name+(v.gstin?" | GSTIN "+v.gstin:""); }).join("\n") || "(no vendors on file yet)";
+  }
+  function aiToolSchema(){
+          return {
+        name: "propose_actions",
+                description: "Report every vendor, bill, payment or material record that should be created or updated in the procurement system, based on the uploaded document/image and/or the user's typed request. Always call this tool exactly once with everything you found, even if the list is empty.",
+                input_schema: {
+                        type: "object",
+                        properties: {
+                                  summary: {type:"string", description:"One or two plain-English sentences summarizing what you read or understood from the input."},
+          questions: {type:"array", items:{type:"string"}, description:"Anything ambiguous you need the user to confirm before these changes should be trusted. Empty array if nothing is unclear."},
+          actions: {
+            type:"array",
+            items: {
+  /* ============================= PAGE: purchase orders ============================= */
 var GST_SLABS = [0,5,12,18,28];
 function ensureBuilder(prefillMaterialId){
   if(!state.ui.pos.builder){
