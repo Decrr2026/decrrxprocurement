@@ -317,7 +317,7 @@ var LOGO_DATA_URI = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAeAAAAEzCAYAA
 
 var DEFAULT_UOM = ["Nos","Sqft","Ltr","Mtr","Sheet","Set","Kg","Box","Roll","Pair"];
 var PAGES = [
-  {id:"dashboard", label:"Dashboard", icon:"&#9635;"},
+  {id:"dashboard", label:"Dashboard", icon:"&#9635;"},{id:"ai", label:"AI Assistant", icon:"&#129302;"},
   {id:"materials", label:"Materials", icon:"&#128736;"},
   {id:"vendors", label:"Vendors", icon:"&#127970;"},
   {id:"bills", label:"Vendor Bills", icon:"&#129534;"},
@@ -370,9 +370,9 @@ var state = {
   transactions: [],
   payments: [],
   bills: [],
-  settings: { companyName:"DECRR Interio", companyTagline:"Procurement & Inventory System", currency:"₹", lowStockThresholdPct:50, partialStockThresholdPct:60, mailReminderDays:21, supplyStopDays:60, materialTypes: DEFAULT_MATERIAL_TYPES.slice(), uomList: DEFAULT_UOM.slice(), poPrefix:"PO-2026-", sites: ["Site 1 - Tower A","Site 2 - Tower B","Central Warehouse"] },
+  settings: { companyName:"DECRR Interio", companyTagline:"Procurement & Inventory System", currency:"₹", lowStockThresholdPct:50, partialStockThresholdPct:60, mailReminderDays:21, supplyStopDays:60, materialTypes: DEFAULT_MATERIAL_TYPES.slice(), uomList: DEFAULT_UOM.slice(), poPrefix:"PO-2026-", sites: ["Site 1 - Tower A","Site 2 - Tower B","Central Warehouse"], aiProxyUrl:"" },
   ui: {
-    materials: { editingId:null, search:"", typeFilter:"All", vendorFilter:"All" },
+    ai: { busy:false, error:"", textInput:"", fileName:"", fileBase64:"", fileMediaType:"", result:null }, materials: { editingId:null, search:"", typeFilter:"All", vendorFilter:"All" },
     vendors: { editingId:null, search:"", duesFilter:"All" },
     bills: { editingId:null, search:"", tab:"bills" },
     pos: { search:"", statusFilter:"All", vendorFilter:"All", builder:null, viewingId:null },
@@ -821,7 +821,7 @@ function persistSettings(){
   var row = { id:"config", company_name:s.companyName, company_tagline:s.companyTagline, currency:s.currency,
     low_stock_threshold_pct:num(s.lowStockThresholdPct,50), partial_stock_threshold_pct:num(s.partialStockThresholdPct,60),
     mail_reminder_days:num(s.mailReminderDays,21), supply_stop_days:num(s.supplyStopDays,60),
-    po_prefix:s.poPrefix, material_types:s.materialTypes, uom_list:s.uomList, sites:s.sites };
+    po_prefix:s.poPrefix, material_types:s.materialTypes, uom_list:s.uomList, sites:s.sites, ai_proxy_url:s.aiProxyUrl||"" };
   return supa.from("settings").upsert(row).then(function(res){ if(res.error) throw res.error; });
 }
 function loadAllData(){
@@ -859,7 +859,7 @@ function loadAllData(){
         lowStockThresholdPct:num(d.low_stock_threshold_pct,50), partialStockThresholdPct:num(d.partial_stock_threshold_pct,60),
         mailReminderDays:num(d.mail_reminder_days,21), supplyStopDays:num(d.supply_stop_days,60),
         poPrefix:d.po_prefix, materialTypes:(d.material_types&&d.material_types.length?d.material_types:DEFAULT_MATERIAL_TYPES.slice()),
-        uomList:(d.uom_list&&d.uom_list.length?d.uom_list:DEFAULT_UOM.slice()), sites:d.sites||[]
+        uomList:(d.uom_list&&d.uom_list.length?d.uom_list:DEFAULT_UOM.slice()), sites:d.sites||[], aiProxyUrl:d.ai_proxy_url||""
       });
     }
   });
@@ -1400,7 +1400,7 @@ function statusBadge(tone,label){ return '<span class="badge '+tone+'"><span cla
 /* ============================= PAGE: dashboard ============================= */
 function renderPage(id){
   switch(id){
-    case "dashboard": return pageDashboard();
+    case "dashboard": return pageDashboard(); case "ai": return pageAI();
     case "materials": return pageMaterials();
     case "vendors": return pageVendors();
     case "bills": return pageBills();
@@ -2200,7 +2200,7 @@ function pageSettings(){
   '</div>' +
   '<div class="card card-pad" style="margin-top:16px;">' +
     '<div class="section-head"><h2>Data</h2></div>' +
-    '<div class="cell-muted">This app is connected to your <b>Decrr Procurement</b> cloud database. Every change you make here is saved instantly and is visible to anyone who signs in from any computer.</div>' +
+    '<div class="cell-muted">This app is connected to your <b>Decrr Procurement</b> cloud database. Every change you make here is saved instantly and is visible to anyone who signs in from any computer.</div>' + '</div>' + '<div class="card card-pad" style="margin-top:16px;">' + '<div class="section-head"><div><h2>AI Assistant</h2><div class="hint">Paste the URL of your Cloudflare Worker proxy here — it holds your Claude API key so the app never has to. The <b>AI Assistant</b> page won\'t work until this is set.</div></div></div>' + '<form novalidate data-form="settings-ai">' + '<div class="field"><label for="setAiProxyUrl">AI Assistant Proxy URL</label><input id="setAiProxyUrl" placeholder="https://your-worker.your-subdomain.workers.dev" value="'+esc(s.aiProxyUrl||"")+'"></div>' + '<div style="margin-top:10px;"><button type="submit" class="btn btn-primary">Save</button></div>' + '</form>' +
   '</div>';
 }
 function settingsListCard(title, key, kind){
@@ -2462,7 +2462,7 @@ function bindGlobalHandlers(){ app.onreset = function(e){ var form = e.target.cl
       case "remove-list-item":
         var key = t.getAttribute("data-key"), val = t.getAttribute("data-value");
         var arr = (state.settings[key]||[]).filter(function(x){return x!==val;});
-        var patch={}; patch[key]=arr; saveSettings(patch);
+        var patch={}; patch[key]=arr; saveSettings(patch); break; case "ai-analyze": runAiAnalysis(); break; case "ai-clear-file": state.ui.ai.fileBase64=""; state.ui.ai.fileName=""; state.ui.ai.fileMediaType=""; render(); break; case "ai-discard-result": state.ui.ai = {busy:false, error:"", textInput:"", fileName:"", fileBase64:"", fileMediaType:"", result:null}; render(); break; case "ai-apply-actions": applyAiActions(); break;
         break;
     }
   };
@@ -2511,7 +2511,7 @@ function bindGlobalHandlers(){ app.onreset = function(e){ var form = e.target.cl
       else { adjustStock(mId, qtyVal, todayISO(), remarkVal); }
       state.ui.inventory.entry = {materialId:"",qty:"",rate:"",remark:"",poId:""}; render();
     } else if(kind==="settings-general"){
-      saveSettings({ companyName:readEntry("setCompany").trim()||state.settings.companyName, companyTagline:readEntry("setTagline").trim(), currency:readEntry("setCurrency").trim()||state.settings.currency, lowStockThresholdPct:num(readEntry("setLowPct"),50), partialStockThresholdPct:num(readEntry("setPartialPct"),60), mailReminderDays:num(readEntry("setMailDays"),21), supplyStopDays:num(readEntry("setStopDays"),60), poPrefix:readEntry("setPoPrefix").trim()||state.settings.poPrefix });
+      saveSettings({ companyName:readEntry("setCompany").trim()||state.settings.companyName, companyTagline:readEntry("setTagline").trim(), currency:readEntry("setCurrency").trim()||state.settings.currency, lowStockThresholdPct:num(readEntry("setLowPct"),50), partialStockThresholdPct:num(readEntry("setPartialPct"),60), mailReminderDays:num(readEntry("setMailDays"),21), supplyStopDays:num(readEntry("setStopDays"),60), poPrefix:readEntry("setPoPrefix").trim()||state.settings.poPrefix }); } else if(kind==="settings-ai"){ saveSettings({ aiProxyUrl: readEntry("setAiProxyUrl").trim() });
     } else if(kind==="add-bill"){
       var billPoId = form.getAttribute("data-id")||"";
       var billVendorId = form.getAttribute("data-vendor-id")||"";
@@ -2564,7 +2564,7 @@ function bindGlobalHandlers(){ app.onreset = function(e){ var form = e.target.cl
     if(el.classList && el.classList.contains("po-item-rate")) { updatePoLine(el); return; }
     if(el.classList && el.classList.contains("po-item-remark")){
       var ridx = parseInt(el.getAttribute("data-idx"),10);
-      if(state.ui.pos.builder && state.ui.pos.builder.items[ridx]) state.ui.pos.builder.items[ridx].remark = el.value;
+      if(state.ui.pos.builder && state.ui.pos.builder.items[ridx]) state.ui.pos.builder.items[ridx].remark = el.value; return; } if(el.id==="aiTextInput"){ state.ui.ai.textInput = el.value; return; } if(el.classList && el.classList.contains("ai-action-field")){ var aidx = parseInt(el.getAttribute("data-idx"),10); var afield = el.getAttribute("data-field"); var aact = state.ui.ai.result && state.ui.ai.result.actions[aidx]; if(aact){ if(afield==="__vendorNewName"){ aact.vendorNewName = el.value; } else { aact.fields[afield] = el.value; } }
       return;
     }
   };
@@ -2611,7 +2611,7 @@ function bindGlobalHandlers(){ app.onreset = function(e){ var form = e.target.cl
       if(mm && !state.ui.pos.builder.items[idx].rate) state.ui.pos.builder.items[idx].rate = mm.purchaseRate;
       render();
     }
-    if(el.classList && el.classList.contains("po-item-gst")){ updatePoLine(el); return; }
+    if(el.classList && el.classList.contains("po-item-gst")){ updatePoLine(el); return; } if(el.id==="aiFileInput"){ handleAiFileSelect(el); return; } if(el.classList && el.classList.contains("ai-action-include")){ var iidx = parseInt(el.getAttribute("data-idx"),10); if(state.ui.ai.result && state.ui.ai.result.actions[iidx]) state.ui.ai.result.actions[iidx].include = el.checked; render(); return; } if(el.classList && el.classList.contains("ai-vendor-select")){ var vidx = parseInt(el.getAttribute("data-idx"),10); if(state.ui.ai.result && state.ui.ai.result.actions[vidx]) state.ui.ai.result.actions[vidx].vendorId = el.value; render(); return; }
   };
 }
 function readVal(form,name){ var el = form.querySelector('[name="'+name+'"]'); return el? el.value : ""; }
