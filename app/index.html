@@ -194,8 +194,9 @@ tbody tr:hover{background:var(--surface-2);}
 .mr-preview-bad{background:var(--danger-weak); color:var(--danger);}
 .form-grid.mr-2col{grid-template-columns:2fr 1fr;}
 .form-grid.mr-3col{grid-template-columns:1fr 1fr 2fr;}
-@media (max-width:820px){ .form-grid.mr-2col{grid-template-columns:1fr;} .form-grid.mr-3col{grid-template-columns:1fr 1fr;} }
-@media (max-width:560px){ .form-grid.mr-2col, .form-grid.mr-3col{grid-template-columns:1fr;} }
+.form-grid.mr-qtymat{grid-template-columns:1fr 2fr;}
+@media (max-width:820px){ .form-grid.mr-2col{grid-template-columns:1fr;} .form-grid.mr-3col{grid-template-columns:1fr 1fr;} .form-grid.mr-qtymat{grid-template-columns:1fr;} }
+@media (max-width:560px){ .form-grid.mr-2col, .form-grid.mr-3col, .form-grid.mr-qtymat{grid-template-columns:1fr;} }
 .dot{width:6px;height:6px;border-radius:50%;display:inline-block; flex:none;}
 .dot.green{background:var(--success);} .dot.amber{background:var(--warning);} .dot.red{background:var(--danger);}
 
@@ -383,7 +384,7 @@ var state = {
   settings: { companyName:"DECRR Interio", companyTagline:"Procurement & Inventory System", currency:"₹", lowStockThresholdPct:50, partialStockThresholdPct:60, mailReminderDays:21, supplyStopDays:60, materialTypes: DEFAULT_MATERIAL_TYPES.slice(), uomList: DEFAULT_UOM.slice(), poPrefix:"PO-2026-", sites: ["Site 1 - Tower A","Site 2 - Tower B","Central Warehouse"], aiProxyUrl:"" },
   ui: {
     ai: { busy:false, error:"", textInput:"", fileName:"", fileBase64:"", fileMediaType:"", result:null }, materials: { editingId:null, search:"", typeFilter:"All", vendorFilter:"All" },
-    mr: { rawInput:"", qty:"", notes:"", siteId:"", overrideMaterialId:"", search:"", statusFilter:"All" },
+    mr: { lines:[{rawInput:"", qty:"", overrideMaterialId:""}], notes:"", siteId:"", search:"", statusFilter:"All" },
     vendors: { editingId:null, search:"", duesFilter:"All" },
     bills: { editingId:null, search:"", tab:"bills" },
     pos: { search:"", statusFilter:"All", vendorFilter:"All", builder:null, viewingId:null },
@@ -1020,23 +1021,37 @@ function upsertBill(id, payload){
   var data = Object.assign({id:finalId}, existing, payload);
   persist("bills", finalId, data).then(function(){ toast(isNew?"Bill added.":"Bill updated."); if(!state.db) render(); });
 }
+// Resolves one line of the Material Request form (its typed text, quantity, and whichever material
+// it ends up pointing at — matched automatically or picked by hand) so the same logic can drive both
+// the live per-line preview and the actual submit validation.
+function mrResolveLine(line){
+  var raw = (line.rawInput||"").trim();
+  var parsed = parseMaterialRequestText(raw);
+  var qty = num(line.qty!==""?line.qty:parsed.qty, 0);
+  var material = line.overrideMaterialId ? materialById(line.overrideMaterialId) : ((parsed.material && parsed.score>=0.55) ? parsed.material : null);
+  return { raw:raw, parsed:parsed, qty:qty, material:material };
+}
 function submitMaterialRequest(){
   var ui = state.ui.mr;
-  var raw = (ui.rawInput||"").trim();
-  if(!raw){ toast("Type what's needed first.","danger"); return; }
-  var parsed = parseMaterialRequestText(raw);
-  var qty = num(ui.qty!==""?ui.qty:parsed.qty, 0);
-  if(!(qty>0)){ toast("Enter a quantity greater than zero.","danger"); return; }
+  var lines = ui.lines.filter(function(l){ return (l.rawInput||"").trim(); });
+  if(!lines.length){ toast("Type at least one material you need.","danger"); return; }
+  var resolved = lines.map(mrResolveLine);
+  var badLine = resolved.filter(function(r){ return !(r.qty>0); })[0];
+  if(badLine){ toast('Enter a quantity greater than zero for "'+badLine.raw+'".',"danger"); return; }
   // Material and Site are optional: if nothing was matched or picked, the request is still logged
   // with exactly what was typed so it isn't blocked — the approver can sort it out by hand.
-  var material = ui.overrideMaterialId ? materialById(ui.overrideMaterialId) : ((parsed.material && parsed.score>=0.55) ? parsed.material : null);
   var reqBy = (state.session && state.session.user && state.session.user.email) || "";
-  var data = { id: uid("mr"), materialId: material?material.id:"", materialName: material?material.name:(parsed.namePart||raw), rawInput: raw,
-    qty: qty, uom: material?(material.uom||""):(parsed.uomGuess||""), siteId: ui.siteId||"", notes: (ui.notes||"").trim(),
-    status: "Pending Approval", decisionNote: "", requestedBy: reqBy, decidedBy: "", decidedAt: "" };
-  persist("materialRequests", data.id, data).then(function(){
-    toast("Material request submitted — waiting on approval.");
-    state.ui.mr = { rawInput:"", qty:"", notes:"", siteId:"", overrideMaterialId:"", search: state.ui.mr.search, statusFilter: state.ui.mr.statusFilter };
+  var siteId = ui.siteId||"", notes = (ui.notes||"").trim();
+  var jobs = resolved.map(function(r){
+    var material = r.material;
+    var data = { id: uid("mr"), materialId: material?material.id:"", materialName: material?material.name:(r.parsed.namePart||r.raw), rawInput: r.raw,
+      qty: r.qty, uom: material?(material.uom||""):(r.parsed.uomGuess||""), siteId: siteId, notes: notes,
+      status: "Pending Approval", decisionNote: "", requestedBy: reqBy, decidedBy: "", decidedAt: "" };
+    return persist("materialRequests", data.id, data);
+  });
+  Promise.all(jobs).then(function(){
+    toast(jobs.length>1 ? (jobs.length+" material requests submitted — waiting on approval.") : "Material request submitted — waiting on approval.");
+    state.ui.mr = { lines:[{rawInput:"",qty:"",overrideMaterialId:""}], notes:"", siteId:"", search: state.ui.mr.search, statusFilter: state.ui.mr.statusFilter };
     render();
   });
 }
@@ -1715,41 +1730,56 @@ function renderMaterialList(){
    Site staff type roughly what they need (typos and shorthand are fine — e.g. "5 bags semnet")
    and it's matched against the Materials list with textSimilarity()/bestMaterialMatch() above.
    No AI API is used: this is a plain client-side fuzzy-match, so it's free and works offline. */
-function pageMaterialRequests(){
-  var ui = state.ui.mr;
-  var parsed = parseMaterialRequestText(ui.rawInput);
-  var qtyVal = ui.qty!=="" ? ui.qty : (parsed.qty!==null ? parsed.qty : "");
+function mrLinePreviewHtml(line, r){
   var matchedMaterial = null, previewHtml;
-  if(ui.overrideMaterialId){
-    matchedMaterial = materialById(ui.overrideMaterialId);
+  if(line.overrideMaterialId){
+    matchedMaterial = materialById(line.overrideMaterialId);
     previewHtml = matchedMaterial ? '<div class="mr-preview mr-preview-ok"><b>&#10003; Selected:</b> '+esc(matchedMaterial.name)+' ('+esc(matchedMaterial.uom)+')</div>' : '';
-  } else if(!ui.rawInput.trim()){
-    previewHtml = '<div class="cell-muted" style="font-size:12.5px;">Type what you need above — e.g. "5 bags semnet" — it\'ll be auto-corrected and matched against your Materials list.</div>';
-  } else if(parsed.material && parsed.score>=0.55){
-    matchedMaterial = parsed.material;
+  } else if(!line.rawInput.trim()){
+    previewHtml = '<div class="cell-muted" style="font-size:12.5px;">e.g. "5 bags semnet" — it\'ll be auto-corrected and matched against your Materials list.</div>';
+  } else if(r.parsed.material && r.parsed.score>=0.55){
+    matchedMaterial = r.parsed.material;
     previewHtml = '<div class="mr-preview mr-preview-ok"><b>&#10003; Matched:</b> '+esc(matchedMaterial.name)+' ('+esc(matchedMaterial.uom)+')'+
-      (parsed.namePart && parsed.namePart.toLowerCase()!==matchedMaterial.name.toLowerCase() ? ' — corrected from "'+esc(parsed.namePart)+'"' : '')+'</div>';
-  } else if(parsed.material && parsed.score>=0.35){
-    matchedMaterial = parsed.material;
+      (r.parsed.namePart && r.parsed.namePart.toLowerCase()!==matchedMaterial.name.toLowerCase() ? ' — corrected from "'+esc(r.parsed.namePart)+'"' : '')+'</div>';
+  } else if(r.parsed.material && r.parsed.score>=0.35){
+    matchedMaterial = r.parsed.material;
     previewHtml = '<div class="mr-preview mr-preview-warn"><b>Not sure —</b> closest match is <b>'+esc(matchedMaterial.name)+'</b>. Confirm or pick a different one below.</div>';
   } else {
     previewHtml = '<div class="mr-preview mr-preview-bad"><b>No confident match found.</b> Pick a material below if you know it, or leave it and it\'ll be logged exactly as typed.</div>';
   }
+  return { matchedMaterial:matchedMaterial, html:previewHtml };
+}
+function pageMaterialRequests(){
+  var ui = state.ui.mr;
+  var linesHtml = ui.lines.map(function(line, idx){
+    var r = mrResolveLine(line);
+    var qtyVal = line.qty!=="" ? line.qty : (r.parsed.qty!==null ? r.parsed.qty : "");
+    var preview = mrLinePreviewHtml(line, r);
+    var materialOpts = '<option value="">— choose material —</option>' + state.materials.map(function(m){return '<option value="'+m.id+'" '+((preview.matchedMaterial&&preview.matchedMaterial.id===m.id)?"selected":"")+'>'+esc(m.name)+' ('+esc(m.uom)+')</option>';}).join("");
+    return '<div class="mr-line"'+(idx>0?' style="margin-top:18px;padding-top:18px;border-top:1px dashed var(--border);"':'')+'>' +
+      '<div style="display:flex;gap:10px;align-items:flex-end;">' +
+        '<div class="field" style="flex:1;"><label for="mrRawInput_'+idx+'">What do you need? <span class="req">*</span></label><input id="mrRawInput_'+idx+'" class="mr-line-raw" data-idx="'+idx+'" placeholder="e.g. 5 bags semnet" value="'+esc(line.rawInput)+'" autocomplete="off"></div>' +
+        (ui.lines.length>1 ? '<button type="button" class="iconbtn danger" title="Remove this material" data-action="mr-remove-line" data-idx="'+idx+'">&#10005;</button>' : '') +
+      '</div>' +
+      '<div style="margin:8px 0 14px;">'+preview.html+'</div>' +
+      '<div class="form-grid mr-qtymat">' +
+        '<div class="field"><label for="mrQty_'+idx+'">Quantity <span class="req">*</span></label><input id="mrQty_'+idx+'" class="mr-line-qty" data-idx="'+idx+'" type="number" min="0" step="0.01" placeholder="Qty" value="'+esc(qtyVal)+'"></div>' +
+        '<div class="field"><label for="mrMaterial_'+idx+'">Material</label><select id="mrMaterial_'+idx+'" class="mr-line-material" data-idx="'+idx+'">'+materialOpts+'</select></div>' +
+      '</div>' +
+    '</div>';
+  }).join("");
   var siteOpts = '<option value="">Select site</option>' + (state.settings.sites||[]).map(function(s){return '<option value="'+esc(s)+'" '+(ui.siteId===s?"selected":"")+'>'+esc(s)+'</option>';}).join("");
-  var materialOpts = '<option value="">— choose material —</option>' + state.materials.map(function(m){return '<option value="'+m.id+'" '+((matchedMaterial&&matchedMaterial.id===m.id)?"selected":"")+'>'+esc(m.name)+' ('+esc(m.uom)+')</option>';}).join("");
   return '<div class="card card-pad">' +
-    '<div class="section-head"><div><h2>Raise a Material Request</h2><div class="hint">Type roughly what\'s needed — typos and shorthand are fine, it\'s matched against your Materials list automatically, no AI or internet needed. This goes to Pending Approval until the senior clears it.</div></div></div>' +
-    '<div class="form-grid mr-2col">' +
-      '<div class="field"><label for="mrRawInput">What do you need? <span class="req">*</span></label><input id="mrRawInput" placeholder="e.g. 5 bags semnet" value="'+esc(ui.rawInput)+'" autocomplete="off"></div>' +
-      '<div class="field"><label for="mrSite">Site</label><select id="mrSite">'+siteOpts+'</select></div>' +
+    '<div class="section-head"><div><h2>Raise a Material Request</h2><div class="hint">Type roughly what\'s needed — typos and shorthand are fine, it\'s matched against your Materials list automatically, no AI or internet needed. Use "+ Add Material" for more than one item in the same request. This goes to Pending Approval until the senior clears it.</div></div></div>' +
+    linesHtml +
+    '<div style="margin-top:14px;">' +
+      '<button type="button" class="btn btn-ghost" data-action="mr-add-line">+ Add Material</button>' +
     '</div>' +
-    '<div style="margin:2px 0 14px;">'+previewHtml+'</div>' +
-    '<div class="form-grid mr-3col">' +
-      '<div class="field"><label for="mrQty">Quantity <span class="req">*</span></label><input id="mrQty" type="number" min="0" step="0.01" placeholder="Qty" value="'+esc(qtyVal)+'"></div>' +
-      '<div class="field"><label for="mrMaterialOverride">Material</label><select id="mrMaterialOverride">'+materialOpts+'</select></div>' +
+    '<div class="form-grid mr-2col" style="margin-top:18px;padding-top:18px;border-top:1px solid var(--border);">' +
+      '<div class="field"><label for="mrSite">Site</label><select id="mrSite">'+siteOpts+'</select></div>' +
       '<div class="field"><label for="mrNotes">Reason / notes</label><input id="mrNotes" placeholder="Why it\'s needed now" value="'+esc(ui.notes)+'"></div>' +
     '</div>' +
-    '<div style="display:flex;gap:10px;margin-top:6px;">' +
+    '<div style="display:flex;gap:10px;margin-top:14px;">' +
       '<button type="button" class="btn btn-primary" data-action="mr-submit">Submit Request</button>' +
       '<button type="button" class="btn btn-ghost" data-action="mr-reset">Clear</button>' +
     '</div>' +
@@ -2883,7 +2913,12 @@ function bindGlobalHandlers(){ app.onreset = function(e){ var form = e.target.cl
         break;
 
       case "mr-submit": submitMaterialRequest(); break;
-      case "mr-reset": state.ui.mr = {rawInput:"",qty:"",notes:"",siteId:"",overrideMaterialId:"",search:state.ui.mr.search,statusFilter:state.ui.mr.statusFilter}; render(); break;
+      case "mr-reset": state.ui.mr = {lines:[{rawInput:"",qty:"",overrideMaterialId:""}],notes:"",siteId:"",search:state.ui.mr.search,statusFilter:state.ui.mr.statusFilter}; render(); break;
+      case "mr-add-line": state.ui.mr.lines.push({rawInput:"",qty:"",overrideMaterialId:""}); render(); break;
+      case "mr-remove-line":
+        var mrRmIdx = parseInt(t.getAttribute("data-idx"),10);
+        if(state.ui.mr.lines.length>1){ state.ui.mr.lines.splice(mrRmIdx,1); render(); }
+        break;
       case "mr-approve": decideMaterialRequest(id, "Approved", ""); break;
       case "mr-open-decision": state.ui.modal = {type:"mr-decision", id:id, decision:t.getAttribute("data-decision")}; render(); break;
       case "delete-material-request": deleteMaterialRequest(id); break;
@@ -3051,8 +3086,6 @@ function bindGlobalHandlers(){ app.onreset = function(e){ var form = e.target.cl
     switch(el.id){
       case "dashSearch": state.ui.dashboard.search = el.value; refreshContainer("dashboard"); return;
       case "matSearch": state.ui.materials.search = el.value; refreshMaterialList(); return;
-      case "mrRawInput": state.ui.mr.rawInput = el.value; render(); return;
-      case "mrQty": state.ui.mr.qty = el.value; return;
       case "mrNotes": state.ui.mr.notes = el.value; return;
       case "mrSearch": state.ui.mr.search = el.value; refreshMrList(); return;
       case "venSearch": state.ui.vendors.search = el.value; refreshVendorList(); return;
@@ -3066,6 +3099,16 @@ function bindGlobalHandlers(){ app.onreset = function(e){ var form = e.target.cl
     }
     if(el.classList && el.classList.contains("po-item-qty")) { updatePoLine(el); return; }
     if(el.classList && el.classList.contains("po-item-rate")) { updatePoLine(el); return; }
+    if(el.classList && el.classList.contains("mr-line-raw")){
+      var mrRawIdx = parseInt(el.getAttribute("data-idx"),10);
+      if(state.ui.mr.lines[mrRawIdx]){ state.ui.mr.lines[mrRawIdx].rawInput = el.value; render(); }
+      return;
+    }
+    if(el.classList && el.classList.contains("mr-line-qty")){
+      var mrQtyIdx = parseInt(el.getAttribute("data-idx"),10);
+      if(state.ui.mr.lines[mrQtyIdx]) state.ui.mr.lines[mrQtyIdx].qty = el.value;
+      return;
+    }
     if(el.classList && el.classList.contains("po-item-remark")){
       var ridx = parseInt(el.getAttribute("data-idx"),10);
       if(state.ui.pos.builder && state.ui.pos.builder.items[ridx]) state.ui.pos.builder.items[ridx].remark = el.value; return; } if(el.id==="aiTextInput"){ state.ui.ai.textInput = el.value; return; } if(el.classList && el.classList.contains("ai-action-field")){ var aidx = parseInt(el.getAttribute("data-idx"),10); var afield = el.getAttribute("data-field"); var aact = state.ui.ai.result && state.ui.ai.result.actions[aidx]; if(aact){ if(afield==="__vendorNewName"){ aact.vendorNewName = el.value; } else { aact.fields[afield] = el.value; } }
@@ -3077,7 +3120,6 @@ function bindGlobalHandlers(){ app.onreset = function(e){ var form = e.target.cl
     switch(el.id){
       case "matTypeFilter": state.ui.materials.typeFilter = el.value; refreshMaterialList(); return;
       case "mrSite": state.ui.mr.siteId = el.value; return;
-      case "mrMaterialOverride": state.ui.mr.overrideMaterialId = el.value; render(); return;
       case "mrStatusFilter": state.ui.mr.statusFilter = el.value; refreshMrList(); return;
       case "matVendorFilter": state.ui.materials.vendorFilter = el.value; refreshMaterialList(); return;
       case "venDuesFilter": state.ui.vendors.duesFilter = el.value; refreshVendorList(); return;
@@ -3118,6 +3160,10 @@ function bindGlobalHandlers(){ app.onreset = function(e){ var form = e.target.cl
       var mm = materialById(el.value);
       if(mm && !state.ui.pos.builder.items[idx].rate) state.ui.pos.builder.items[idx].rate = mm.purchaseRate;
       render();
+    }
+    if(el.classList && el.classList.contains("mr-line-material")){
+      var mrMatIdx = parseInt(el.getAttribute("data-idx"),10);
+      if(state.ui.mr.lines[mrMatIdx]){ state.ui.mr.lines[mrMatIdx].overrideMaterialId = el.value; render(); }
     }
     if(el.classList && el.classList.contains("po-item-gst")){ updatePoLine(el); return; } if(el.id==="aiFileInput"){ handleAiFileSelect(el); return; } if(el.classList && el.classList.contains("ai-action-include")){ var iidx = parseInt(el.getAttribute("data-idx"),10); if(state.ui.ai.result && state.ui.ai.result.actions[iidx]) state.ui.ai.result.actions[iidx].include = el.checked; render(); return; } if(el.classList && el.classList.contains("ai-vendor-select")){ var vidx = parseInt(el.getAttribute("data-idx"),10); if(state.ui.ai.result && state.ui.ai.result.actions[vidx]) state.ui.ai.result.actions[vidx].vendorId = el.value; render(); return; }
   };
