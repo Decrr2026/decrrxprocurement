@@ -1,0 +1,323 @@
+<title>Material Request Flow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F9FAFB; --surface:#FFFFFF; --surface-2:#F1F2F6; --border:#E4E7EC;
+    --text:#101828; --text-muted:#667085; --text-faint:#98A2B3;
+    --accent:#4F46E5; --accent-weak:#EEF2FF; --accent-text:#4338CA;
+    --success:#0F7A5C; --success-weak:#E7F7F1;
+    --warning:#B54708; --warning-weak:#FFF6E5;
+    --danger:#D92D20; --danger-weak:#FEF2F2;
+    --shadow:0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.06);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0B0C0F; --surface:#15171C; --surface-2:#1B1E25; --border:rgba(255,255,255,.10);
+      --text:#F2F4F7; --text-muted:#9AA4B2; --text-faint:#6B7280;
+      --accent:#818CF8; --accent-weak:rgba(129,140,248,.16); --accent-text:#A5B4FC;
+      --success:#34D399; --success-weak:rgba(52,211,153,.14);
+      --warning:#FBBF24; --warning-weak:rgba(251,191,36,.14);
+      --danger:#F87171; --danger-weak:rgba(248,113,113,.14);
+      --shadow:0 1px 2px rgba(0,0,0,.3), 0 1px 3px rgba(0,0,0,.4);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0B0C0F; --surface:#15171C; --surface-2:#1B1E25; --border:rgba(255,255,255,.10);
+    --text:#F2F4F7; --text-muted:#9AA4B2; --text-faint:#6B7280;
+    --accent:#818CF8; --accent-weak:rgba(129,140,248,.16); --accent-text:#A5B4FC;
+    --success:#34D399; --success-weak:rgba(52,211,153,.14);
+    --warning:#FBBF24; --warning-weak:rgba(251,191,36,.14);
+    --danger:#F87171; --danger-weak:rgba(248,113,113,.14);
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 1px 3px rgba(0,0,0,.4);
+  }
+
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:'Inter',system-ui,-apple-system,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{ max-width:880px; margin:0 auto; padding-inline:20px; padding-block:48px 72px; }
+
+  h1,h2,h3{ font-family:'Fraunces',Georgia,serif; font-weight:600; letter-spacing:-.01em; text-wrap:balance; margin:0; }
+  .eyebrow{
+    font-family:'IBM Plex Mono',ui-monospace,monospace; font-size:11.5px; font-weight:500;
+    text-transform:uppercase; letter-spacing:.09em; color:var(--accent-text);
+    display:flex; align-items:center; gap:8px; margin-bottom:14px;
+  }
+  .eyebrow::before{ content:""; width:16px; height:1.5px; background:var(--accent); display:inline-block; }
+
+  header.page-head{ margin-bottom:40px; }
+  header.page-head h1{ font-size:clamp(26px,4vw,34px); line-height:1.18; }
+  header.page-head p.lede{
+    margin:16px 0 0; max-width:62ch; color:var(--text-muted); font-size:16px; line-height:1.65;
+  }
+
+  .callout{
+    margin-top:22px; border:1px solid var(--border); background:var(--surface);
+    border-left:3px solid var(--accent); border-radius:10px; padding:16px 18px;
+    box-shadow:var(--shadow);
+  }
+  .callout p{ margin:0; font-size:14px; line-height:1.65; color:var(--text); }
+  .callout p + p{ margin-top:8px; }
+  .callout b{ font-weight:600; }
+  .callout code{
+    font-family:'IBM Plex Mono',ui-monospace,monospace; font-size:12.5px;
+    background:var(--surface-2); padding:1px 5px; border-radius:4px; color:var(--text);
+  }
+
+  section{ margin-top:56px; }
+  section > h2{ font-size:20px; margin-bottom:6px; }
+  section > .section-sub{ color:var(--text-muted); font-size:13.5px; margin:0 0 22px; max-width:60ch; line-height:1.6; }
+
+  /* ---- diagram card ---- */
+  .diagram-card{
+    background:var(--surface); border:1px solid var(--border); border-radius:14px;
+    padding:22px 18px 14px; box-shadow:var(--shadow); overflow-x:auto;
+  }
+  figure{ margin:0; }
+  figure svg{ display:block; width:100%; height:auto; min-width:640px; }
+  figcaption{
+    margin-top:14px; padding-top:14px; border-top:1px dashed var(--border);
+    font-size:12.5px; color:var(--text-muted); line-height:1.6;
+  }
+
+  /* ---- role cards ---- */
+  .role-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+  @media (max-width:640px){ .role-grid{ grid-template-columns:1fr; } }
+  .role-card{
+    background:var(--surface); border:1px solid var(--border); border-radius:12px;
+    padding:18px; box-shadow:var(--shadow); display:flex; flex-direction:column; gap:8px;
+  }
+  .role-card .role-tag{
+    font-family:'IBM Plex Mono',ui-monospace,monospace; font-size:10.5px; font-weight:500;
+    text-transform:uppercase; letter-spacing:.08em; color:var(--text-faint);
+  }
+  .role-card h3{ font-family:'Inter',sans-serif; font-size:15.5px; font-weight:600; }
+  .role-card p{ margin:0; font-size:13px; color:var(--text-muted); line-height:1.55; }
+
+  /* ---- status legend ---- */
+  .status-row{ display:flex; flex-wrap:wrap; gap:10px; }
+  .pill{
+    display:inline-flex; align-items:center; gap:7px; padding:7px 13px; border-radius:999px;
+    font-size:12.5px; font-weight:600; border:1px solid transparent;
+  }
+  .pill .dot{ width:7px; height:7px; border-radius:50%; }
+  .pill.pending{ background:var(--warning-weak); color:var(--warning); }
+  .pill.pending .dot{ background:var(--warning); }
+  .pill.approved{ background:var(--success-weak); color:var(--success); }
+  .pill.approved .dot{ background:var(--success); }
+  .pill.changes{ background:var(--accent-weak); color:var(--accent-text); }
+  .pill.changes .dot{ background:var(--accent); }
+  .pill.rejected{ background:var(--danger-weak); color:var(--danger); }
+  .pill.rejected .dot{ background:var(--danger); }
+  .status-desc{ margin-top:16px; display:grid; gap:10px; }
+  .status-desc div{ font-size:13.5px; color:var(--text-muted); line-height:1.6; }
+  .status-desc b{ color:var(--text); font-weight:600; }
+
+  /* ---- numbered steps ---- */
+  ol.steps{ list-style:none; margin:0; padding:0; display:grid; gap:0; counter-reset:step; }
+  ol.steps li{
+    counter-increment:step; position:relative; padding:18px 0 18px 46px;
+    border-bottom:1px solid var(--border);
+  }
+  ol.steps li:first-child{ padding-top:2px; }
+  ol.steps li:last-child{ border-bottom:none; padding-bottom:2px; }
+  ol.steps li::before{
+    content:counter(step); position:absolute; left:0; top:16px;
+    font-family:'IBM Plex Mono',ui-monospace,monospace; font-size:12px; font-weight:600;
+    width:26px; height:26px; border-radius:50%; background:var(--accent-weak); color:var(--accent-text);
+    display:flex; align-items:center; justify-content:center;
+  }
+  ol.steps li:first-child::before{ top:0; }
+  ol.steps h4{ margin:0 0 4px; font-family:'Inter',sans-serif; font-size:14.5px; font-weight:600; }
+  ol.steps p{ margin:0; font-size:13.5px; color:var(--text-muted); line-height:1.6; max-width:60ch; }
+
+  footer.note{
+    margin-top:64px; padding-top:20px; border-top:1px solid var(--border);
+    font-size:12.5px; color:var(--text-faint); line-height:1.7;
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="page-head">
+    <div class="eyebrow">DECRR Interio · Process Reference</div>
+    <h1>From site shortfall to approved Purchase&nbsp;Order</h1>
+    <p class="lede">
+      Today, anyone with access to Purchase Orders can create and place one straight away — there's no checkpoint.
+      This topology adds one: every material request a site raises has to clear a single senior approver
+      before it becomes a Purchase Order in DECRR&nbsp;Interio.
+    </p>
+    <div class="callout">
+      <p><b>No new screens needed.</b> This runs entirely on the app as it exists today — the request and approval happen outside the software (a shared register, a WhatsApp note, a call), and the only trace left inside DECRR Interio is the Purchase Order itself, with the approval reference written into its <code>Remarks / Notes / Terms &amp; Conditions</code> field.</p>
+      <p>The approver in this version is fixed — <b>one senior person clears every request, for every site</b> — so there's no routing logic to maintain, only a habit to enforce.</p>
+    </div>
+  </header>
+
+  <section>
+    <h2>The flow</h2>
+    <p class="section-sub">Five stages, one decision point, two ways back out. The dashboard already computes the trigger; everything from the second box onward is the new checkpoint.</p>
+
+    <div class="diagram-card">
+      <figure>
+        <svg viewBox="0 0 980 460" role="img" aria-label="Flow diagram: the Dashboard flags a stock shortfall, the site raises a Material Request, it waits as Pending Approval, the senior approver either approves it — drafting a Purchase Order that continues through the existing Placed, Received, Vendor Bill and Payment stages — sends it back for changes which loops to the site, or rejects it, closing the request with a reason recorded.">
+          <defs>
+            <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <!-- ===== main spine ===== -->
+          <!-- A: dashboard -->
+          <rect x="10" y="70" width="168" height="72" rx="10" fill="none" stroke="currentColor" stroke-width="1.4" opacity="0.55"/>
+          <text x="94" y="98" text-anchor="middle" font-family="Inter,sans-serif" font-size="13.5" font-weight="600" fill="currentColor">Dashboard flags</text>
+          <text x="94" y="114" text-anchor="middle" font-family="Inter,sans-serif" font-size="13.5" font-weight="600" fill="currentColor">a shortfall</text>
+          <text x="94" y="132" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="10.5" fill="currentColor" opacity="0.6">Available + On Order &lt; Requirement</text>
+
+          <line x1="178" y1="106" x2="216" y2="106" stroke="currentColor" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+          <!-- B: material request -->
+          <rect x="218" y="70" width="168" height="72" rx="10" fill="var(--accent-weak)" stroke="var(--accent)" stroke-width="1.4"/>
+          <text x="302" y="98" text-anchor="middle" font-family="Inter,sans-serif" font-size="13.5" font-weight="600" fill="var(--accent-text)">Site raises a</text>
+          <text x="302" y="114" text-anchor="middle" font-family="Inter,sans-serif" font-size="13.5" font-weight="600" fill="var(--accent-text)">Material Request</text>
+          <text x="302" y="132" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="10.5" fill="var(--accent-text)" opacity="0.75">material · qty · site · reason</text>
+
+          <line x1="386" y1="106" x2="424" y2="106" stroke="currentColor" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+          <!-- C: pending approval -->
+          <rect x="426" y="70" width="150" height="72" rx="10" fill="var(--warning-weak)" stroke="var(--warning)" stroke-width="1.4"/>
+          <text x="501" y="102" text-anchor="middle" font-family="Inter,sans-serif" font-size="13.5" font-weight="600" fill="var(--warning)">Pending</text>
+          <text x="501" y="118" text-anchor="middle" font-family="Inter,sans-serif" font-size="13.5" font-weight="600" fill="var(--warning)">Approval</text>
+
+          <!-- annotation under C -->
+          <line x1="501" y1="142" x2="501" y2="170" stroke="currentColor" stroke-width="1" stroke-dasharray="2 3" opacity="0.5"/>
+          <rect x="401" y="172" width="200" height="58" rx="8" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="3 3" opacity="0.45"/>
+          <text x="501" y="192" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="10" fill="currentColor" opacity="0.65">senior sees, from the app:</text>
+          <text x="501" y="207" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="10" fill="currentColor" opacity="0.65">stock on hand · preferred vendor</text>
+          <text x="501" y="221" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="10" fill="currentColor" opacity="0.65">+ purchase rate</text>
+
+          <line x1="576" y1="106" x2="614" y2="106" stroke="currentColor" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+          <!-- D: senior decides -->
+          <rect x="616" y="64" width="170" height="84" rx="10" fill="var(--surface-2)" stroke="currentColor" stroke-width="1.6"/>
+          <text x="701" y="96" text-anchor="middle" font-family="Inter,sans-serif" font-size="14" font-weight="700" fill="currentColor">Senior reviews</text>
+          <text x="701" y="113" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="10" fill="currentColor" opacity="0.6">one fixed approver</text>
+          <text x="701" y="127" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="10" fill="currentColor" opacity="0.6">— every site's requests</text>
+
+          <!-- approve arrow -->
+          <line x1="786" y1="98" x2="824" y2="98" stroke="var(--success)" stroke-width="1.6" marker-end="url(#arrow)"/>
+          <text x="805" y="86" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="10" font-weight="600" fill="var(--success)">approve</text>
+
+          <!-- E: PO drafted -->
+          <rect x="826" y="62" width="144" height="72" rx="10" fill="var(--success-weak)" stroke="var(--success)" stroke-width="1.4"/>
+          <text x="898" y="92" text-anchor="middle" font-family="Inter,sans-serif" font-size="13" font-weight="600" fill="var(--success)">Purchase Order</text>
+          <text x="898" y="108" text-anchor="middle" font-family="Inter,sans-serif" font-size="13" font-weight="600" fill="var(--success)">drafted</text>
+          <text x="898" y="123" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="9.5" fill="var(--success)" opacity="0.75">vendor + rate pre-filled</text>
+
+          <!-- down to existing flow -->
+          <line x1="898" y1="134" x2="898" y2="172" stroke="currentColor" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+          <!-- existing PO flow box -->
+          <rect x="796" y="174" width="174" height="106" rx="10" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.6"/>
+          <text x="883" y="194" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="9.5" letter-spacing="0.06em" fill="currentColor" opacity="0.55">EXISTING PO FLOW</text>
+          <text x="883" y="214" text-anchor="middle" font-family="Inter,sans-serif" font-size="12" fill="currentColor">Placed</text>
+          <text x="883" y="232" text-anchor="middle" font-family="Inter,sans-serif" font-size="12" fill="currentColor">→ Received</text>
+          <text x="883" y="250" text-anchor="middle" font-family="Inter,sans-serif" font-size="12" fill="currentColor">→ Vendor Bill</text>
+          <text x="883" y="268" text-anchor="middle" font-family="Inter,sans-serif" font-size="12" fill="currentColor">→ Payment</text>
+
+          <!-- changes requested: loop from D up and back to B -->
+          <path d="M 701 64 L 701 30 L 302 30 L 302 68" fill="none" stroke="var(--accent)" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#arrow)"/>
+          <text x="501" y="22" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="10" font-weight="600" fill="var(--accent-text)">changes requested — back to site, with a comment</text>
+
+          <!-- rejected: down from D to terminal -->
+          <line x1="701" y1="148" x2="701" y2="186" stroke="var(--danger)" stroke-width="1.6" marker-end="url(#arrow)"/>
+          <text x="722" y="172" text-anchor="start" font-family="IBM Plex Mono,monospace" font-size="10" font-weight="600" fill="var(--danger)">reject</text>
+
+          <rect x="616" y="188" width="170" height="72" rx="10" fill="var(--danger-weak)" stroke="var(--danger)" stroke-width="1.4"/>
+          <text x="701" y="216" text-anchor="middle" font-family="Inter,sans-serif" font-size="13" font-weight="600" fill="var(--danger)">Closed —</text>
+          <text x="701" y="232" text-anchor="middle" font-family="Inter,sans-serif" font-size="13" font-weight="600" fill="var(--danger)">reason recorded</text>
+          <text x="701" y="248" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="9.5" fill="var(--danger)" opacity="0.75">site is notified, no PO created</text>
+        </svg>
+      </figure>
+      <figcaption>
+        The dashboard's own shortfall logic starts the chain; the senior's decision is the only gate. Approval hands
+        straight into the Purchase&nbsp;Order builder with vendor and rate already known from the Materials master —
+        nothing about the existing Placed → Received → Vendor Bill → Payment flow changes.
+      </figcaption>
+    </div>
+  </section>
+
+  <section>
+    <h2>Who does what</h2>
+    <p class="section-sub">Three roles, none of them new hires — this is a discipline, not an org chart change.</p>
+    <div class="role-grid">
+      <div class="role-card">
+        <span class="role-tag">Raises the request</span>
+        <h3>Site In-charge</h3>
+        <p>Watches the Dashboard's <b>Purchase Required</b> flag for their site, then logs a request: material, quantity, and why it's needed now rather than next cycle.</p>
+      </div>
+      <div class="role-card">
+        <span class="role-tag">Clears the request</span>
+        <h3>Senior Approver</h3>
+        <p>One person, fixed, for every site. Checks the request against stock on hand, what's already on order, and the material's preferred vendor and rate before deciding.</p>
+      </div>
+      <div class="role-card">
+        <span class="role-tag">Places the order</span>
+        <h3>Procurement</h3>
+        <p>Once approved, creates the Purchase Order in DECRR&nbsp;Interio as usual — and notes the approval reference in the order's Terms field for the record.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Request status</h2>
+    <p class="section-sub">A request only ever sits in one of these four states.</p>
+    <div class="status-row">
+      <span class="pill pending"><span class="dot"></span>Pending Approval</span>
+      <span class="pill approved"><span class="dot"></span>Approved</span>
+      <span class="pill changes"><span class="dot"></span>Changes Requested</span>
+      <span class="pill rejected"><span class="dot"></span>Rejected</span>
+    </div>
+    <div class="status-desc">
+      <div><b>Pending Approval</b> — sitting in the senior's queue, untouched since the site raised it.</div>
+      <div><b>Approved</b> — cleared to become a Purchase Order; procurement creates it referencing this approval.</div>
+      <div><b>Changes Requested</b> — sent back with a comment (wrong quantity, missing reason, wrong material); the site edits and resubmits, re-entering Pending.</div>
+      <div><b>Rejected</b> — closed for good, with a reason on file; no Purchase Order follows.</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Running it day to day</h2>
+    <p class="section-sub">No new software — just where each step happens inside what already exists.</p>
+    <ol class="steps">
+      <li>
+        <h4>Spot the shortfall</h4>
+        <p>On the Dashboard's Procurement table, filter Stock Level to <b>Purchase Required</b>. That row is the trigger — Available Stock plus what's already on order can't cover the site's requirement.</p>
+      </li>
+      <li>
+        <h4>Log the request</h4>
+        <p>The site adds one line to the shared request register (a sheet, a channel, whatever the team already checks): material, quantity, site, and the reason. Give it a short reference, e.g. <code>MR-LKO-014</code>.</p>
+      </li>
+      <li>
+        <h4>Senior reviews against the app</h4>
+        <p>Before deciding, the senior opens Materials to confirm the Purchase Rate and Preferred Vendor, and Inventory to double-check nothing's already inbound for that site.</p>
+      </li>
+      <li>
+        <h4>Decision recorded on the register</h4>
+        <p>Approved, sent back for changes, or rejected — the outcome and any comment go back on the same line the site logged, so the request never loses its own history.</p>
+      </li>
+      <li>
+        <h4>Purchase Order created, referencing the approval</h4>
+        <p>Only after approval does anyone open Purchase&nbsp;Orders in DECRR Interio. The order's Terms field carries the reference, e.g. <code>Approved: MR-LKO-014 by R. Sharma, 21 Sep</code> — so the paper trail and the system record line up.</p>
+      </li>
+    </ol>
+  </section>
+
+  <footer class="note">
+    Proposed process reference for DECRR Interio — describes a workflow to run alongside the app as it stands today; no change to the software is required to start using it.
+  </footer>
+
+</div>
