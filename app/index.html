@@ -385,7 +385,7 @@ var state = {
   settings: { companyName:"DECRR Interio", companyTagline:"Procurement & Inventory System", currency:"₹", lowStockThresholdPct:50, partialStockThresholdPct:60, mailReminderDays:21, supplyStopDays:60, materialTypes: DEFAULT_MATERIAL_TYPES.slice(), uomList: DEFAULT_UOM.slice(), poPrefix:"PO-2026-", sites: ["Site 1 - Tower A","Site 2 - Tower B","Central Warehouse"], aiProxyUrl:"" },
   ui: {
     ai: { busy:false, error:"", textInput:"", fileName:"", fileBase64:"", fileMediaType:"", result:null }, materials: { editingId:null, search:"", typeFilter:"All", vendorFilter:"All" },
-    mr: { lines:[{rawInput:"", qty:"", overrideMaterialId:""}], notes:"", siteId:"", search:"", statusFilter:"All" },
+    mr: { lines:[{rawInput:"", qty:"", overrideMaterialId:""}], notes:"", siteId:"", search:"", statusFilter:"All", submitError:"" },
     vendors: { editingId:null, search:"", duesFilter:"All" },
     bills: { editingId:null, search:"", tab:"bills" },
     pos: { search:"", statusFilter:"All", vendorFilter:"All", builder:null, viewingId:null },
@@ -886,13 +886,16 @@ function syncPoItems(poId, items){
     return supa.from("po_items").insert(rows).then(function(insRes){ if(insRes.error) throw insRes.error; });
   });
 }
-function persist(kind, id, data, isDelete){
+function persist(kind, id, data, isDelete, silent){
   // kind: materials | vendors | purchaseOrders | transactions
   // Optimistic update: apply to local state and repaint immediately so the UI never waits on
   // a network round-trip, then write to Supabase in the background. A rejected write rolls the
   // optimistic change back with a clear error instead of leaving the UI silently out of sync.
   // (Realtime subscriptions — see wireRealtime() — also reconcile state from the server shortly
   // after, the same way the old Firestore onSnapshot listeners used to.)
+  // `silent` skips the automatic toast — used when a caller is submitting several rows at once
+  // (e.g. a multi-line Material Request) and wants to show ONE combined error instead of one
+  // identical toast per failed row.
   var prevSnapshot = state[kind].slice();
   localApply(kind, id, data, isDelete);
   render();
@@ -905,7 +908,7 @@ function persist(kind, id, data, isDelete){
     state[kind] = prevSnapshot;
     render();
     var msg = (err && err.message) ? err.message : "The change could not be saved.";
-    toast(msg, "danger");
+    if(!silent) toast(msg, "danger");
     throw err;
   });
 }
@@ -1042,6 +1045,7 @@ function mrResolveLine(line){
 }
 function submitMaterialRequest(){
   var ui = state.ui.mr;
+  ui.submitError = "";
   var lines = ui.lines.filter(function(l){ return (l.rawInput||"").trim(); });
   if(!lines.length){ toast("Type at least one material you need.","danger"); return; }
   var resolved = lines.map(mrResolveLine);
@@ -1056,11 +1060,19 @@ function submitMaterialRequest(){
     var data = { id: uid("mr"), materialId: material?material.id:"", materialName: material?material.name:(r.parsed.namePart||r.raw), rawInput: r.raw,
       qty: r.qty, uom: material?(material.uom||""):(r.parsed.uomGuess||""), siteId: siteId, notes: notes,
       status: "Pending Approval", decisionNote: "", requestedBy: reqBy, decidedBy: "", decidedAt: "" };
-    return persist("materialRequests", data.id, data);
+    // silent:true — see persist(): a failed multi-line submit would otherwise stack one identical
+    // toast per line, exactly like the old duplicate "could not refresh" toast on the Dashboard.
+    return persist("materialRequests", data.id, data, false, true);
   });
   Promise.all(jobs).then(function(){
     toast(jobs.length>1 ? (jobs.length+" material requests submitted — waiting on approval.") : "Material request submitted — waiting on approval.");
-    state.ui.mr = { lines:[{rawInput:"",qty:"",overrideMaterialId:""}], notes:"", siteId:"", search: state.ui.mr.search, statusFilter: state.ui.mr.statusFilter };
+    state.ui.mr = { lines:[{rawInput:"",qty:"",overrideMaterialId:""}], notes:"", siteId:"", search: state.ui.mr.search, statusFilter: state.ui.mr.statusFilter, submitError:"" };
+    render();
+  }).catch(function(err){
+    // One clear, persistent message instead of a toast that can fade before it's read — this is
+    // what fires right now if the material_requests table hasn't been created in Supabase yet.
+    var msg = (err && err.message) ? err.message : "Could not submit the request — check your connection and try again.";
+    state.ui.mr.submitError = msg;
     render();
   });
 }
@@ -1788,6 +1800,7 @@ function pageMaterialRequests(){
       '<div class="field"><label for="mrSite">Site</label><select id="mrSite">'+siteOpts+'</select></div>' +
       '<div class="field"><label for="mrNotes">Reason / notes</label><input id="mrNotes" placeholder="Why it\'s needed now" value="'+esc(ui.notes)+'"></div>' +
     '</div>' +
+    (ui.submitError ? '<div class="mr-preview mr-preview-bad" style="margin-top:14px;">&#9888; Could not submit: '+esc(ui.submitError)+'</div>' : '') +
     '<div style="display:flex;gap:10px;margin-top:14px;">' +
       '<button type="button" class="btn btn-primary" data-action="mr-submit">Submit Request</button>' +
       '<button type="button" class="btn btn-ghost" data-action="mr-reset">Clear</button>' +
@@ -2922,7 +2935,7 @@ function bindGlobalHandlers(){ app.onreset = function(e){ var form = e.target.cl
         break;
 
       case "mr-submit": submitMaterialRequest(); break;
-      case "mr-reset": state.ui.mr = {lines:[{rawInput:"",qty:"",overrideMaterialId:""}],notes:"",siteId:"",search:state.ui.mr.search,statusFilter:state.ui.mr.statusFilter}; render(); break;
+      case "mr-reset": state.ui.mr = {lines:[{rawInput:"",qty:"",overrideMaterialId:""}],notes:"",siteId:"",search:state.ui.mr.search,statusFilter:state.ui.mr.statusFilter,submitError:""}; render(); break;
       case "mr-add-line": state.ui.mr.lines.push({rawInput:"",qty:"",overrideMaterialId:""}); render(); break;
       case "mr-remove-line":
         var mrRmIdx = parseInt(t.getAttribute("data-idx"),10);
