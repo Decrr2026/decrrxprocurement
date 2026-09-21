@@ -374,6 +374,7 @@ var state = {
   authError: "",
   authBusy: false,
   dataLoaded: false,
+  dataLoading: false,
   materials: [],
   vendors: [],
   purchaseOrders: [],
@@ -764,7 +765,7 @@ function initApp(){
   supa.auth.onAuthStateChange(function(event, session){
     if(event==="SIGNED_IN" && session){ var sameUser = state.session && state.session.user && session.user && state.session.user.id === session.user.id; if(sameUser && state.dataLoaded){ state.session = session; return; } onAuthed(session); }
     else if(event==="SIGNED_OUT"){
-      state.session = null; state.dataLoaded = false;
+      state.session = null; state.dataLoaded = false; state.dataLoading = false;
       if(realtimeChannel){ supa.removeChannel(realtimeChannel); realtimeChannel = null; }
       render();
     }
@@ -773,11 +774,19 @@ function initApp(){
 function onAuthed(session){
   state.session = session;
   state.authError = "";
+  // Supabase can fire getSession() AND an onAuthStateChange("SIGNED_IN") event for the same
+  // session in quick succession on page load. Without this guard both paths call onAuthed()
+  // and race two concurrent loadAllData() calls — each failing independently and showing its
+  // own "Could not refresh …" toast, which is why that error used to appear twice stacked.
+  if(state.dataLoading) return;
+  state.dataLoading = true;
   loadAllData().then(function(){
+    state.dataLoading = false;
     state.dataLoaded = true;
     render();
     wireRealtime();
   }).catch(function(err){
+    state.dataLoading = false;
     console.error("Initial data load failed", err);
     toast((err&&err.message)||"Could not load data from the database.","danger");
     state.dataLoaded = true;
