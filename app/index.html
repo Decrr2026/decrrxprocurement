@@ -188,6 +188,10 @@ tbody tr:hover{background:var(--surface-2);}
 .badge.red{background:var(--danger-weak); color:var(--danger);}
 .badge.blue{background:var(--accent-weak); color:var(--accent-text);}
 .badge.grey{background:var(--surface-2); color:var(--text-muted);}
+.mr-preview{font-size:12.5px; padding:8px 12px; border-radius:8px; line-height:1.5;}
+.mr-preview-ok{background:var(--success-weak); color:var(--success);}
+.mr-preview-warn{background:var(--warning-weak); color:var(--warning);}
+.mr-preview-bad{background:var(--danger-weak); color:var(--danger);}
 .dot{width:6px;height:6px;border-radius:50%;display:inline-block; flex:none;}
 .dot.green{background:var(--success);} .dot.amber{background:var(--warning);} .dot.red{background:var(--danger);}
 
@@ -319,6 +323,7 @@ var DEFAULT_UOM = ["Nos","Sqft","Ltr","Mtr","Sheet","Set","Kg","Box","Roll","Pai
 var PAGES = [
   {id:"dashboard", label:"Dashboard", icon:"&#9635;"},{id:"ai", label:"AI Assistant", icon:"&#129302;"},
   {id:"materials", label:"Materials", icon:"&#128736;"},
+  {id:"material-requests", label:"Material Requests", icon:"&#128203;"},
   {id:"vendors", label:"Vendors", icon:"&#127970;"},
   {id:"bills", label:"Vendor Bills", icon:"&#129534;"},
   {id:"pos", label:"Purchase Orders", icon:"&#128196;"},
@@ -370,9 +375,11 @@ var state = {
   transactions: [],
   payments: [],
   bills: [],
+  materialRequests: [],
   settings: { companyName:"DECRR Interio", companyTagline:"Procurement & Inventory System", currency:"₹", lowStockThresholdPct:50, partialStockThresholdPct:60, mailReminderDays:21, supplyStopDays:60, materialTypes: DEFAULT_MATERIAL_TYPES.slice(), uomList: DEFAULT_UOM.slice(), poPrefix:"PO-2026-", sites: ["Site 1 - Tower A","Site 2 - Tower B","Central Warehouse"], aiProxyUrl:"" },
   ui: {
     ai: { busy:false, error:"", textInput:"", fileName:"", fileBase64:"", fileMediaType:"", result:null }, materials: { editingId:null, search:"", typeFilter:"All", vendorFilter:"All" },
+    mr: { rawInput:"", qty:"", notes:"", siteId:"", overrideMaterialId:"", search:"", statusFilter:"All" },
     vendors: { editingId:null, search:"", duesFilter:"All" },
     bills: { editingId:null, search:"", tab:"bills" },
     pos: { search:"", statusFilter:"All", vendorFilter:"All", builder:null, viewingId:null },
@@ -665,6 +672,68 @@ function nextPoNumber(){
 function vendorName(id){ var v=state.vendors.filter(function(x){return x.id===id;})[0]; return v?v.name:"—"; }
 function materialById(id){ return state.materials.filter(function(m){return m.id===id;})[0]; }
 
+/* ============================= free-text material matching (no API needed) =============================
+   Fixes typos like "semnet" -> "Cement" by scoring the typed text against every material's name with a
+   Levenshtein edit-distance similarity, plus a containment boost for partial/substring typing. Runs
+   entirely client-side against state.materials — no network call, no API key. */
+// Damerau-Levenshtein (adjacent-transposition-aware): a plain edit-distance would score a common
+// typo like "semnet" vs "cement" (a transposed "en"/"ne") as 3 edits; counting a swap as a single
+// edit brings that down to 2, which is what makes typo-tolerant matching actually feel forgiving.
+function levenshteinDist(a,b){
+  a=(a||""); b=(b||"");
+  var m=a.length, n=b.length;
+  if(!m) return n; if(!n) return m;
+  var d=[]; var i,j;
+  for(i=0;i<=m;i++){ d[i]=[i]; }
+  for(j=0;j<=n;j++){ d[0][j]=j; }
+  for(i=1;i<=m;i++){
+    for(j=1;j<=n;j++){
+      var cost = a.charAt(i-1)===b.charAt(j-1) ? 0 : 1;
+      d[i][j] = Math.min(d[i-1][j]+1, d[i][j-1]+1, d[i-1][j-1]+cost);
+      if(i>1 && j>1 && a.charAt(i-1)===b.charAt(j-2) && a.charAt(i-2)===b.charAt(j-1)){
+        d[i][j] = Math.min(d[i][j], d[i-2][j-2]+1);
+      }
+    }
+  }
+  return d[m][n];
+}
+function textSimilarity(a,b){
+  a=(a||"").toLowerCase().trim(); b=(b||"").toLowerCase().trim();
+  if(!a || !b) return 0;
+  if(a===b) return 1;
+  var score = 1 - (levenshteinDist(a,b)/Math.max(a.length,b.length));
+  if(b.indexOf(a)>-1 || a.indexOf(b)>-1) score = Math.max(score, 0.82);
+  return score;
+}
+function bestMaterialMatch(text){
+  var q=(text||"").trim();
+  if(!q) return {material:null, score:0};
+  var best=null, bestScore=0;
+  state.materials.forEach(function(m){
+    var s = textSimilarity(q, m.name);
+    if(s>bestScore){ bestScore=s; best=m; }
+  });
+  return {material:best, score:bestScore};
+}
+// Splits "5 bags semnet" into a quantity guess, a UOM guess (matched against Settings > UOM list),
+// and the remaining words to fuzzy-match against the Materials list.
+function parseMaterialRequestText(raw){
+  var text=(raw||"").trim();
+  var qty=null, uom="", rest=text;
+  var qm = /^(\d+(?:\.\d+)?)\s*(.*)$/.exec(text);
+  if(qm){ qty=parseFloat(qm[1]); rest=qm[2].trim(); }
+  var words = rest.length ? rest.split(/\s+/) : [];
+  var uomList = state.settings.uomList||[];
+  if(words.length>1){
+    var w0 = words[0].toLowerCase().replace(/s$/,"");
+    var hitUom = uomList.filter(function(u){ return u.toLowerCase().replace(/s$/,"")===w0; })[0];
+    if(hitUom){ uom = hitUom; words = words.slice(1); }
+  }
+  var namePart = words.join(" ").replace(/^(of|for)\s+/i,"").trim();
+  var info = bestMaterialMatch(namePart || rest);
+  return { qty:qty, uomGuess:uom, namePart: namePart||rest, material: info.material, score: info.score };
+}
+
 /* ============================= persistence layer (Supabase) ============================= */
 // This app talks directly to a Supabase project (Postgres + Auth) — no separate backend
 // server. SUPABASE_ANON_KEY above is safe to ship in this file: it can only do what the
@@ -672,7 +741,7 @@ function materialById(id){ return state.materials.filter(function(m){return m.id
 // "nothing unless the request comes from a signed-in user."
 var supa = null;
 var realtimeChannel = null;
-var KIND_TABLE = { materials:"materials", vendors:"vendors", purchaseOrders:"purchase_orders", transactions:"transactions", payments:"payments", bills:"bills" };
+var KIND_TABLE = { materials:"materials", vendors:"vendors", purchaseOrders:"purchase_orders", transactions:"transactions", payments:"payments", bills:"bills", materialRequests:"material_requests" };
 
 function initApp(){
   if(!(window.supabase && typeof window.supabase.createClient==="function")){
@@ -751,6 +820,11 @@ function toSnakeRow(kind, obj){
   if(kind==="bills"){
     return { id:obj.id, po_id:obj.poId||null, vendor_id:obj.vendorId||null, bill_number:obj.billNumber||"", bill_date:obj.billDate||null, amount:num(obj.amount,0), remark:obj.remark||"", issue_place:obj.issuePlace||"", ordered_by:obj.orderedBy||"" };
   }
+  if(kind==="materialRequests"){
+    return { id:obj.id, material_id:obj.materialId||null, material_name:obj.materialName||"", raw_input:obj.rawInput||"", qty:num(obj.qty,0), uom:obj.uom||"",
+      site_id:obj.siteId||"", notes:obj.notes||"", status:obj.status||"Pending Approval", decision_note:obj.decisionNote||"",
+      requested_by:obj.requestedBy||"", decided_by:obj.decidedBy||null, decided_at:obj.decidedAt||null };
+  }
   return obj;
 }
 function fromSnakeRow(kind, row){
@@ -774,6 +848,11 @@ function fromSnakeRow(kind, row){
   }
   if(kind==="bills"){
     return { id:row.id, poId:row.po_id||"", vendorId:row.vendor_id||"", billNumber:row.bill_number||"", billDate:row.bill_date||"", amount:num(row.amount,0), remark:row.remark||"", issuePlace:row.issue_place||"", orderedBy:row.ordered_by||"", createdAt:row.created_at||"" };
+  }
+  if(kind==="materialRequests"){
+    return { id:row.id, materialId:row.material_id||"", materialName:row.material_name||"", rawInput:row.raw_input||"", qty:num(row.qty,0), uom:row.uom||"",
+      siteId:row.site_id||"", notes:row.notes||"", status:row.status||"Pending Approval", decisionNote:row.decision_note||"",
+      requestedBy:row.requested_by||"", decidedBy:row.decided_by||"", decidedAt:row.decided_at||"", createdAt:row.created_at||"" };
   }
   return row;
 }
@@ -833,12 +912,14 @@ function loadAllData(){
     supa.from("transactions").select("*"),
     supa.from("settings").select("*").eq("id","config").maybeSingle(),
     supa.from("payments").select("*"),
-    supa.from("bills").select("*")
+    supa.from("bills").select("*"),
+    supa.from("material_requests").select("*")
   ]).then(function(results){
-    var matRes=results[0], venRes=results[1], poRes=results[2], itemsRes=results[3], txRes=results[4], setRes=results[5], payRes=results[6], billRes=results[7];
-    var failedLabels = []; [["materials",matRes],["vendors",venRes],["purchase orders",poRes],["PO items",itemsRes],["transactions",txRes],["settings",setRes],["payments",payRes],["bills",billRes]].forEach(function(pair){ var label=pair[0], r=pair[1]; if(r && r.error){ console.error(r.error); failedLabels.push(label); } });
+    var matRes=results[0], venRes=results[1], poRes=results[2], itemsRes=results[3], txRes=results[4], setRes=results[5], payRes=results[6], billRes=results[7], mrRes=results[8];
+    var failedLabels = []; [["materials",matRes],["vendors",venRes],["purchase orders",poRes],["PO items",itemsRes],["transactions",txRes],["settings",setRes],["payments",payRes],["bills",billRes],["material requests",mrRes]].forEach(function(pair){ var label=pair[0], r=pair[1]; if(r && r.error){ console.error(r.error); failedLabels.push(label); } });
     if(!payRes.error) state.payments = (payRes.data||[]).map(function(r){ return fromSnakeRow("payments", r); });
     if(!billRes.error) state.bills = (billRes.data||[]).map(function(r){ return fromSnakeRow("bills", r); });
+    if(mrRes && !mrRes.error) state.materialRequests = (mrRes.data||[]).map(function(r){ return fromSnakeRow("materialRequests", r); });
     if(!matRes.error) state.materials = (matRes.data||[]).map(function(r){ return fromSnakeRow("materials", r); });
     if(!venRes.error) state.vendors = (venRes.data||[]).map(function(r){ return fromSnakeRow("vendors", r); });
     var itemsByPo = {};
@@ -877,6 +958,7 @@ function wireRealtime(){
     .on("postgres_changes", {event:"*", schema:"public", table:"settings"}, reload)
     .on("postgres_changes", {event:"*", schema:"public", table:"payments"}, reload)
     .on("postgres_changes", {event:"*", schema:"public", table:"bills"}, reload)
+    .on("postgres_changes", {event:"*", schema:"public", table:"material_requests"}, reload)
     .subscribe();
 }
 
@@ -933,6 +1015,39 @@ function upsertBill(id, payload){
   var existing = state.bills.filter(function(b){return b.id===finalId;})[0] || {};
   var data = Object.assign({id:finalId}, existing, payload);
   persist("bills", finalId, data).then(function(){ toast(isNew?"Bill added.":"Bill updated."); if(!state.db) render(); });
+}
+function submitMaterialRequest(){
+  var ui = state.ui.mr;
+  var raw = (ui.rawInput||"").trim();
+  if(!raw){ toast("Type what's needed first.","danger"); return; }
+  if(!ui.siteId){ toast("Select a site for this request.","danger"); return; }
+  var parsed = parseMaterialRequestText(raw);
+  var qty = num(ui.qty!==""?ui.qty:parsed.qty, 0);
+  if(!(qty>0)){ toast("Enter a quantity greater than zero.","danger"); return; }
+  var material = ui.overrideMaterialId ? materialById(ui.overrideMaterialId) : ((parsed.material && parsed.score>=0.55) ? parsed.material : null);
+  if(!material){ toast("Couldn't confidently match a material from what you typed — pick one from the Material dropdown.","danger"); return; }
+  var reqBy = (state.session && state.session.user && state.session.user.email) || "";
+  var data = { id: uid("mr"), materialId: material.id, materialName: material.name, rawInput: raw,
+    qty: qty, uom: material.uom||parsed.uomGuess||"", siteId: ui.siteId, notes: (ui.notes||"").trim(),
+    status: "Pending Approval", decisionNote: "", requestedBy: reqBy, decidedBy: "", decidedAt: "" };
+  persist("materialRequests", data.id, data).then(function(){
+    toast("Material request submitted — waiting on approval.");
+    state.ui.mr = { rawInput:"", qty:"", notes:"", siteId:"", overrideMaterialId:"", search: state.ui.mr.search, statusFilter: state.ui.mr.statusFilter };
+    render();
+  });
+}
+function decideMaterialRequest(id, newStatus, note){
+  var req = state.materialRequests.filter(function(r){return r.id===id;})[0];
+  if(!req) return;
+  var decidedBy = (state.session && state.session.user && state.session.user.email) || "";
+  var data = Object.assign({}, req, { status:newStatus, decisionNote:(note||"").trim(), decidedBy:decidedBy, decidedAt:new Date().toISOString() });
+  persist("materialRequests", id, data).then(function(){
+    toast(newStatus==="Approved" ? "Request approved." : (newStatus==="Rejected" ? "Request rejected." : "Sent back to the site for changes."));
+  });
+}
+function deleteMaterialRequest(id){
+  if(!confirmAction("Delete this material request? This cannot be undone.")) return;
+  persist("materialRequests", id, null, true).then(function(){ toast("Material request deleted."); });
 }
 function upsertPayment(id, payload){
   if(!(num(payload.amount,0)>0)){ toast("Enter a payment amount greater than 0.","danger"); return; }
@@ -1402,6 +1517,7 @@ function renderPage(id){
   switch(id){
     case "dashboard": return pageDashboard(); case "ai": return pageAI();
     case "materials": return pageMaterials();
+    case "material-requests": return pageMaterialRequests();
     case "vendors": return pageVendors();
     case "bills": return pageBills();
     case "pos": return pagePOs();
@@ -1589,6 +1705,94 @@ function renderMaterialList(){
   }).join("");
   return '<div class="table-wrap"><table><thead><tr><th>S.No</th><th>Material Name</th><th>Type</th><th>Description</th><th>UOM</th><th>Preferred Vendor</th><th class="right">Site Requirement</th><th class="right">Purchase Rate</th><th class="right">In Stock</th><th></th></tr></thead><tbody>'+body+'</tbody></table></div>' +
     '<div class="cell-muted" style="margin-top:10px;">Showing '+rows.length+' of '+state.materials.length+' materials</div>';
+}
+
+/* ============================= PAGE: material requests =============================
+   Site staff type roughly what they need (typos and shorthand are fine — e.g. "5 bags semnet")
+   and it's matched against the Materials list with textSimilarity()/bestMaterialMatch() above.
+   No AI API is used: this is a plain client-side fuzzy-match, so it's free and works offline. */
+function pageMaterialRequests(){
+  var ui = state.ui.mr;
+  var parsed = parseMaterialRequestText(ui.rawInput);
+  var qtyVal = ui.qty!=="" ? ui.qty : (parsed.qty!==null ? parsed.qty : "");
+  var matchedMaterial = null, previewHtml;
+  if(ui.overrideMaterialId){
+    matchedMaterial = materialById(ui.overrideMaterialId);
+    previewHtml = matchedMaterial ? '<div class="mr-preview mr-preview-ok"><b>&#10003; Selected:</b> '+esc(matchedMaterial.name)+' ('+esc(matchedMaterial.uom)+')</div>' : '';
+  } else if(!ui.rawInput.trim()){
+    previewHtml = '<div class="cell-muted" style="font-size:12.5px;">Type what you need above — e.g. "5 bags semnet" — it\'ll be auto-corrected and matched against your Materials list.</div>';
+  } else if(parsed.material && parsed.score>=0.55){
+    matchedMaterial = parsed.material;
+    previewHtml = '<div class="mr-preview mr-preview-ok"><b>&#10003; Matched:</b> '+esc(matchedMaterial.name)+' ('+esc(matchedMaterial.uom)+')'+
+      (parsed.namePart && parsed.namePart.toLowerCase()!==matchedMaterial.name.toLowerCase() ? ' — corrected from "'+esc(parsed.namePart)+'"' : '')+'</div>';
+  } else if(parsed.material && parsed.score>=0.35){
+    matchedMaterial = parsed.material;
+    previewHtml = '<div class="mr-preview mr-preview-warn"><b>Not sure —</b> closest match is <b>'+esc(matchedMaterial.name)+'</b>. Confirm or pick a different one below.</div>';
+  } else {
+    previewHtml = '<div class="mr-preview mr-preview-bad"><b>No confident match found.</b> Please choose the material manually below.</div>';
+  }
+  var siteOpts = '<option value="">Select site</option>' + (state.settings.sites||[]).map(function(s){return '<option value="'+esc(s)+'" '+(ui.siteId===s?"selected":"")+'>'+esc(s)+'</option>';}).join("");
+  var materialOpts = '<option value="">— choose material —</option>' + state.materials.map(function(m){return '<option value="'+m.id+'" '+((matchedMaterial&&matchedMaterial.id===m.id)?"selected":"")+'>'+esc(m.name)+' ('+esc(m.uom)+')</option>';}).join("");
+  return '<div class="card card-pad">' +
+    '<div class="section-head"><div><h2>Raise a Material Request</h2><div class="hint">Type roughly what\'s needed — typos and shorthand are fine, it\'s matched against your Materials list automatically, no AI or internet needed. This goes to Pending Approval until the senior clears it.</div></div></div>' +
+    '<div class="form-grid" style="grid-template-columns:2fr 1fr;">' +
+      '<div class="field"><label for="mrRawInput">What do you need? <span class="req">*</span></label><input id="mrRawInput" placeholder="e.g. 5 bags semnet" value="'+esc(ui.rawInput)+'" autocomplete="off"></div>' +
+      '<div class="field"><label for="mrSite">Site <span class="req">*</span></label><select id="mrSite">'+siteOpts+'</select></div>' +
+    '</div>' +
+    '<div style="margin:2px 0 14px;">'+previewHtml+'</div>' +
+    '<div class="form-grid" style="grid-template-columns:1fr 1fr 2fr;">' +
+      '<div class="field"><label for="mrQty">Quantity <span class="req">*</span></label><input id="mrQty" type="number" min="0" step="0.01" placeholder="Qty" value="'+esc(qtyVal)+'"></div>' +
+      '<div class="field"><label for="mrMaterialOverride">Material'+((!matchedMaterial)?' <span class="req">*</span>':'')+'</label><select id="mrMaterialOverride">'+materialOpts+'</select></div>' +
+      '<div class="field"><label for="mrNotes">Reason / notes</label><input id="mrNotes" placeholder="Why it\'s needed now" value="'+esc(ui.notes)+'"></div>' +
+    '</div>' +
+    '<div style="display:flex;gap:10px;margin-top:6px;">' +
+      '<button type="button" class="btn btn-primary" data-action="mr-submit">Submit Request</button>' +
+      '<button type="button" class="btn btn-ghost" data-action="mr-reset">Clear</button>' +
+    '</div>' +
+  '</div>' +
+  '<div class="card card-pad" style="margin-top:16px;">' +
+    '<div class="section-head"><h2>Requests</h2></div>' +
+    '<div class="toolbar">' +
+      '<div class="search-box"><span class="ic">&#128269;</span><input id="mrSearch" placeholder="Search material or site…" value="'+esc(ui.search)+'"></div>' +
+      '<select id="mrStatusFilter">'+["All","Pending Approval","Approved","Changes Requested","Rejected"].map(function(s){return '<option '+(ui.statusFilter===s?"selected":"")+'>'+esc(s)+'</option>';}).join("")+'</select>' +
+    '</div>' +
+    '<div id="mrListContainer" style="margin-top:14px;">'+renderMaterialRequestList()+'</div>' +
+  '</div>';
+}
+function renderMaterialRequestList(){
+  var ui = state.ui.mr;
+  var rows = state.materialRequests.filter(function(r){
+    var q = ui.search.toLowerCase();
+    var matchSearch = !q || (r.materialName||"").toLowerCase().indexOf(q)>-1 || (r.siteId||"").toLowerCase().indexOf(q)>-1;
+    var matchStatus = ui.statusFilter==="All" || r.status===ui.statusFilter;
+    return matchSearch && matchStatus;
+  }).slice().sort(function(a,b){ return (b.createdAt||"").localeCompare(a.createdAt||""); });
+  if(!rows.length) return emptyState("No material requests yet.","&#128203;");
+  var toneFor = {"Pending Approval":"amber","Approved":"green","Changes Requested":"blue","Rejected":"red"};
+  var body = rows.map(function(r){
+    var actions;
+    if(r.status==="Pending Approval"){
+      actions = '<div style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap;">' +
+        '<button class="btn btn-ghost" style="padding:5px 10px;font-size:12px;" data-action="mr-approve" data-id="'+r.id+'">Approve</button>' +
+        '<button class="btn btn-ghost" style="padding:5px 10px;font-size:12px;" data-action="mr-open-decision" data-id="'+r.id+'" data-decision="Changes Requested">Changes</button>' +
+        '<button class="btn btn-ghost" style="padding:5px 10px;font-size:12px;color:var(--danger);" data-action="mr-open-decision" data-id="'+r.id+'" data-decision="Rejected">Reject</button>' +
+      '</div>';
+    } else if(r.status==="Approved"){
+      actions = '<button class="btn btn-ghost" style="padding:5px 10px;font-size:12px;" data-action="mr-create-po" data-id="'+r.id+'">Create PO</button>';
+    } else {
+      actions = '<span class="cell-muted">'+(r.decisionNote?esc(r.decisionNote):"—")+'</span>';
+    }
+    return '<tr>' +
+      '<td class="cell-muted">'+fmtDate((r.createdAt||"").slice(0,10))+'</td>' +
+      '<td><b>'+esc(r.materialName||r.rawInput)+'</b>'+(r.rawInput && r.rawInput.toLowerCase()!==(r.materialName||"").toLowerCase() ? '<div class="cell-muted" style="font-size:11px;">as typed: "'+esc(r.rawInput)+'"</div>' : '')+'</td>' +
+      '<td class="right num">'+fmtNum(r.qty)+' '+esc(r.uom||"")+'</td>' +
+      '<td class="cell-muted">'+esc(r.siteId||"—")+'</td>' +
+      '<td class="cell-muted">'+esc(r.notes||"—")+'</td>' +
+      '<td>'+statusBadge(toneFor[r.status]||"grey", r.status)+'</td>' +
+      '<td class="right">'+actions+'</td>' +
+    '</tr>';
+  }).join("");
+  return '<div class="table-wrap"><table><thead><tr><th>Date</th><th>Material</th><th class="right">Qty</th><th>Site</th><th>Reason</th><th>Status</th><th></th></tr></thead><tbody>'+body+'</tbody></table></div>';
 }
 
 /* ============================= PAGE: vendors ============================= */
@@ -2485,7 +2689,15 @@ function renderModal(){
   if(modal.type==="po-view") return modalWrap("Purchase Order "+esc((state.purchaseOrders.filter(function(p){return p.id===modal.id;})[0]||{}).poNumber||""), poViewBody(modal.id), true);
   if(modal.type==="vendor-ledger") return modalWrap("Vendor Ledger — "+esc((vendorById(modal.id)||{}).name||""), vendorLedgerBody(modal.id), true);
   if(modal.type==="quick-add-vendor") return modalWrap("Add New Vendor", quickAddVendorBody(), false);
+  if(modal.type==="mr-decision") return modalWrap(modal.decision==="Rejected"?"Reject Material Request":"Request Changes", mrDecisionBody(modal), false);
   return "";
+}
+function mrDecisionBody(modal){
+  var isReject = modal.decision==="Rejected";
+  return '<form novalidate data-form="mr-decision">' +
+    '<div class="field"><label for="mrDecisionNote">Note'+(isReject?' <span class="req">*</span>':'')+'</label><textarea id="mrDecisionNote" name="note" rows="3" placeholder="'+(isReject?"Why this is being rejected…":"What needs to change…")+'"></textarea></div>' +
+    '<div style="display:flex;gap:10px;margin-top:14px;"><button type="submit" class="btn btn-primary">'+(isReject?"Reject Request":"Send Back for Changes")+'</button><button type="button" class="btn btn-ghost" data-action="close-modal">Cancel</button></div>' +
+  '</form>';
 }
 function quickAddVendorBody(){
   return '<form novalidate data-form="quick-add-vendor">' +
@@ -2666,6 +2878,22 @@ function bindGlobalHandlers(){ app.onreset = function(e){ var form = e.target.cl
         }
         break;
 
+      case "mr-submit": submitMaterialRequest(); break;
+      case "mr-reset": state.ui.mr = {rawInput:"",qty:"",notes:"",siteId:"",overrideMaterialId:"",search:state.ui.mr.search,statusFilter:state.ui.mr.statusFilter}; render(); break;
+      case "mr-approve": decideMaterialRequest(id, "Approved", ""); break;
+      case "mr-open-decision": state.ui.modal = {type:"mr-decision", id:id, decision:t.getAttribute("data-decision")}; render(); break;
+      case "delete-material-request": deleteMaterialRequest(id); break;
+      case "mr-create-po":
+        var mreq = state.materialRequests.filter(function(x){return x.id===id;})[0];
+        if(mreq){
+          state.page="pos"; state.ui.pos.builder=null;
+          ensureBuilder(mreq.materialId);
+          state.ui.pos.builder.siteId = mreq.siteId||"";
+          if(state.ui.pos.builder.items[0]) state.ui.pos.builder.items[0].qty = mreq.qty;
+          state.ui.pos.builder.terms = (state.ui.pos.builder.terms||"") + "\nApproved material request: \""+mreq.rawInput+"\"" + (mreq.decisionNote?" — "+mreq.decisionNote:"");
+          render(); scrollTopOfContent();
+        }
+        break;
       case "edit-material": state.ui.materials.editingId = id; render(); scrollTopOfContent(); break;
       case "cancel-edit-material": state.ui.materials.editingId = null; render(); break;
       case "delete-material": deleteMaterial(id); break;
@@ -2743,6 +2971,12 @@ function bindGlobalHandlers(){ app.onreset = function(e){ var form = e.target.cl
       if(!payload.name || !payload.type || !payload.uom){ toast("Please fill in name, type and UOM.","danger"); return; }
       upsertMaterial(id||null, payload);
       state.ui.materials.editingId = null; render();
+    } else if(kind==="mr-decision"){
+      var mrModal = state.ui.modal;
+      var mrNoteVal = readVal(form,"note").trim();
+      if(mrModal && mrModal.decision==="Rejected" && !mrNoteVal){ toast("Please give a reason for rejecting.","danger"); return; }
+      if(mrModal){ decideMaterialRequest(mrModal.id, mrModal.decision, mrNoteVal); }
+      state.ui.modal = null; render();
     } else if(kind==="vendor"){
       var vid = form.getAttribute("data-id")||null;
       var vpayload = { name:readVal(form,"name").trim(), contact:readVal(form,"contact").trim(), phone:readVal(form,"phone").trim(), email:readVal(form,"email").trim(), address:readVal(form,"address").trim(), gstin:readVal(form,"gstin").trim().toUpperCase(), creditPeriodDays:num(readVal(form,"creditPeriodDays"),30) };
@@ -2813,6 +3047,10 @@ function bindGlobalHandlers(){ app.onreset = function(e){ var form = e.target.cl
     switch(el.id){
       case "dashSearch": state.ui.dashboard.search = el.value; refreshContainer("dashboard"); return;
       case "matSearch": state.ui.materials.search = el.value; refreshMaterialList(); return;
+      case "mrRawInput": state.ui.mr.rawInput = el.value; render(); return;
+      case "mrQty": state.ui.mr.qty = el.value; return;
+      case "mrNotes": state.ui.mr.notes = el.value; return;
+      case "mrSearch": state.ui.mr.search = el.value; refreshMrList(); return;
       case "venSearch": state.ui.vendors.search = el.value; refreshVendorList(); return;
       case "poSearch": state.ui.pos.search = el.value; refreshPoList(); return;
       case "invSearch": state.ui.inventory.search = el.value; refreshInvList(); return;
@@ -2834,6 +3072,9 @@ function bindGlobalHandlers(){ app.onreset = function(e){ var form = e.target.cl
     var el = e.target;
     switch(el.id){
       case "matTypeFilter": state.ui.materials.typeFilter = el.value; refreshMaterialList(); return;
+      case "mrSite": state.ui.mr.siteId = el.value; return;
+      case "mrMaterialOverride": state.ui.mr.overrideMaterialId = el.value; render(); return;
+      case "mrStatusFilter": state.ui.mr.statusFilter = el.value; refreshMrList(); return;
       case "matVendorFilter": state.ui.materials.vendorFilter = el.value; refreshMaterialList(); return;
       case "venDuesFilter": state.ui.vendors.duesFilter = el.value; refreshVendorList(); return;
       case "issueLogSiteFilter": state.ui.issueLog.siteFilter = el.value; refreshIssueList(); return;
@@ -2920,6 +3161,7 @@ function submitPO(){
 
 /* ---- scoped refreshers (avoid full-page rerender while typing in a search box elsewhere on the page) ---- */
 function refreshMaterialList(){ var c=document.getElementById("materialListContainer"); if(c) withFocusPreserved(function(){ c.innerHTML = renderMaterialList(); }); }
+function refreshMrList(){ var c=document.getElementById("mrListContainer"); if(c) withFocusPreserved(function(){ c.innerHTML = renderMaterialRequestList(); }); }
 function refreshVendorList(){ var c=document.getElementById("vendorListContainer"); if(c) withFocusPreserved(function(){ c.innerHTML = renderVendorList(); }); }
 function refreshPoList(){ var c=document.getElementById("poListContainer"); if(c) withFocusPreserved(function(){ c.innerHTML = renderPoList(); }); }
 function refreshInvList(){ var c=document.getElementById("invListContainer"); if(c) withFocusPreserved(function(){ c.innerHTML = renderInventoryList(); }); }
