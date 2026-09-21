@@ -192,6 +192,10 @@ tbody tr:hover{background:var(--surface-2);}
 .mr-preview-ok{background:var(--success-weak); color:var(--success);}
 .mr-preview-warn{background:var(--warning-weak); color:var(--warning);}
 .mr-preview-bad{background:var(--danger-weak); color:var(--danger);}
+.form-grid.mr-2col{grid-template-columns:2fr 1fr;}
+.form-grid.mr-3col{grid-template-columns:1fr 1fr 2fr;}
+@media (max-width:820px){ .form-grid.mr-2col{grid-template-columns:1fr;} .form-grid.mr-3col{grid-template-columns:1fr 1fr;} }
+@media (max-width:560px){ .form-grid.mr-2col, .form-grid.mr-3col{grid-template-columns:1fr;} }
 .dot{width:6px;height:6px;border-radius:50%;display:inline-block; flex:none;}
 .dot.green{background:var(--success);} .dot.amber{background:var(--warning);} .dot.red{background:var(--danger);}
 
@@ -1735,12 +1739,12 @@ function pageMaterialRequests(){
   var materialOpts = '<option value="">— choose material —</option>' + state.materials.map(function(m){return '<option value="'+m.id+'" '+((matchedMaterial&&matchedMaterial.id===m.id)?"selected":"")+'>'+esc(m.name)+' ('+esc(m.uom)+')</option>';}).join("");
   return '<div class="card card-pad">' +
     '<div class="section-head"><div><h2>Raise a Material Request</h2><div class="hint">Type roughly what\'s needed — typos and shorthand are fine, it\'s matched against your Materials list automatically, no AI or internet needed. This goes to Pending Approval until the senior clears it.</div></div></div>' +
-    '<div class="form-grid" style="grid-template-columns:2fr 1fr;">' +
+    '<div class="form-grid mr-2col">' +
       '<div class="field"><label for="mrRawInput">What do you need? <span class="req">*</span></label><input id="mrRawInput" placeholder="e.g. 5 bags semnet" value="'+esc(ui.rawInput)+'" autocomplete="off"></div>' +
       '<div class="field"><label for="mrSite">Site <span class="req">*</span></label><select id="mrSite">'+siteOpts+'</select></div>' +
     '</div>' +
     '<div style="margin:2px 0 14px;">'+previewHtml+'</div>' +
-    '<div class="form-grid" style="grid-template-columns:1fr 1fr 2fr;">' +
+    '<div class="form-grid mr-3col">' +
       '<div class="field"><label for="mrQty">Quantity <span class="req">*</span></label><input id="mrQty" type="number" min="0" step="0.01" placeholder="Qty" value="'+esc(qtyVal)+'"></div>' +
       '<div class="field"><label for="mrMaterialOverride">Material'+((!matchedMaterial)?' <span class="req">*</span>':'')+'</label><select id="mrMaterialOverride">'+materialOpts+'</select></div>' +
       '<div class="field"><label for="mrNotes">Reason / notes</label><input id="mrNotes" placeholder="Why it\'s needed now" value="'+esc(ui.notes)+'"></div>' +
