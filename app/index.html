@@ -2077,7 +2077,8 @@ function pagePOs(){
 
   var isEditingPo = !!builder.id;
   var builderHtml = '<div class="card card-pad">' +
-    '<div class="section-head"><div><h2>'+(isEditingPo?"Edit Purchase Order":"Create Purchase Order")+'</h2><div class="hint">'+(isEditingPo?('Editing <b class="num">'+esc(builder.poNumber||"")+'</b>'):('Next PO number: <b class="num">'+esc(nextPoNumber())+'</b>'))+'</div></div></div>' +
+    '<div class="section-head"><div><h2>'+(isEditingPo?"Edit Purchase Order":"Create Purchase Order")+'</h2><div class="hint">'+(isEditingPo?'Editing an existing order — you can change its PO Number below if it needs correcting.':('Next PO number: <b class="num">'+esc(nextPoNumber())+'</b>'))+'</div></div></div>' +
+    (isEditingPo ? ('<div class="form-grid" style="grid-template-columns:1fr;margin-bottom:2px;"><div class="field"><label for="poNumberEdit">PO Number <span class="req">*</span></label><input id="poNumberEdit" type="text" value="'+esc(builder.poNumber||"")+'" style="max-width:220px;font-family:\'IBM Plex Mono\',monospace;font-weight:700;"></div></div>') : '') +
     '<div class="form-grid" style="grid-template-columns:2fr 1fr 1fr;">' +
       '<div class="field"><label for="poVendor">Vendor <span class="req">*</span></label>' +
         '<div style="display:flex;gap:8px;">' +
@@ -2846,6 +2847,7 @@ function bindGlobalHandlers(){ app.onreset = function(e){ var form = e.target.cl
       case "poVendor": ensureBuilder(); state.ui.pos.builder.vendorId = el.value; return;
       case "poDate": ensureBuilder(); state.ui.pos.builder.date = el.value; return;
       case "poSite": ensureBuilder(); state.ui.pos.builder.siteId = el.value; return;
+      case "poNumberEdit": ensureBuilder(); state.ui.pos.builder.poNumber = el.value; return;
       case "rcvPo": state.ui.receive.poId = el.value; state.ui.receive.materialId=""; render(); return;
       case "rcvMaterial": state.ui.receive.materialId = el.value; var m=materialById(el.value); if(m && !state.ui.receive.rate) state.ui.receive.rate=m.purchaseRate; render(); return;
       case "rcvRate": state.ui.receive.rate = el.value; return;
@@ -2905,7 +2907,13 @@ function submitPO(){
   if(!terms){ toast("Remarks / Terms & Conditions is required before creating the order.","danger"); return; }
   var poDate = b.date||todayISO();
   var po = { vendorId:b.vendorId, date: poDate, siteId:b.siteId||"", items: items, terms: terms };
-  if(isEditingPo){ po.id = b.id; po.poNumber = b.poNumber; }
+  if(isEditingPo){
+    var newPoNumber = (b.poNumber||"").trim();
+    if(!newPoNumber){ toast("PO Number cannot be empty.","danger"); return; }
+    var dupPo = state.purchaseOrders.some(function(p){ return p.id!==b.id && (p.poNumber||"").trim().toLowerCase()===newPoNumber.toLowerCase(); });
+    if(dupPo){ toast("Another purchase order already uses PO Number \""+newPoNumber+"\". Choose a different number.","danger"); return; }
+    po.id = b.id; po.poNumber = newPoNumber;
+  }
   else { po.poNumber = nextPoNumber(); po.status = "Placed"; }
   savePO(po).then(function(saved){ state.ui.pos.builder=null; state.ui.modal={type:"po-view", id:saved.id}; render(); });
 }
