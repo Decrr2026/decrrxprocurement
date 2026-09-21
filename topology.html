@@ -1,0 +1,274 @@
+<title>DECRR Interio Topology</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#EEF3F6; --surface:#FFFFFF; --ink:#16324A; --ink-soft:#4C6B80;
+    --line:#B9CBD6; --line-soft:#D6E2E9; --accent:#C9622D; --accent-weak:#F3DECD;
+    --good:#2F8F76; --pending:#8A6D3B; --pending-weak:#F1E6D2;
+    --shadow: 0 1px 2px rgba(22,50,74,.06), 0 6px 20px rgba(22,50,74,.06);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --paper:#0D2131; --surface:#122A3D; --ink:#E4EEF4; --ink-soft:#8FAFC4;
+      --line:#26495F; --line-soft:#1B3549; --accent:#E79A63; --accent-weak:#3A2A1E;
+      --good:#5FBFA2; --pending:#E3C989; --pending-weak:#332A17;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 28px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper:#0D2131; --surface:#122A3D; --ink:#E4EEF4; --ink-soft:#8FAFC4;
+    --line:#26495F; --line-soft:#1B3549; --accent:#E79A63; --accent-weak:#3A2A1E;
+    --good:#5FBFA2; --pending:#E3C989; --pending-weak:#332A17;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 28px rgba(0,0,0,.35);
+  }
+
+  *{box-sizing:border-box;}
+  body{
+    background:var(--paper); color:var(--ink);
+    font-family:"Inter",system-ui,sans-serif;
+    padding-inline:20px; padding-block:36px 56px;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:960px; margin-inline:auto;}
+
+  .eyebrow{
+    font-family:"IBM Plex Mono",monospace; font-size:12px; font-weight:500;
+    letter-spacing:.09em; text-transform:uppercase; color:var(--accent);
+    margin:0 0 10px;
+  }
+  h1{
+    font-family:"Fraunces",Georgia,serif; font-weight:600; font-size:clamp(28px,5vw,38px);
+    line-height:1.08; margin:0 0 12px; text-wrap:balance;
+  }
+  .lede{
+    font-size:15.5px; line-height:1.6; color:var(--ink-soft); max-width:64ch; margin:0 0 16px;
+  }
+  .status-pill{
+    display:inline-flex; align-items:center; gap:8px; font-family:"IBM Plex Mono",monospace;
+    font-size:12px; font-weight:600; color:var(--pending); background:var(--pending-weak);
+    border:1px solid var(--pending); border-radius:999px; padding:6px 14px 6px 12px;
+  }
+  .status-pill .dot{width:7px; height:7px; border-radius:50%; background:var(--pending);}
+
+  figure{margin:30px 0 8px;}
+  .diagram-card{
+    background:var(--surface); border:1px solid var(--line-soft); border-radius:14px;
+    padding:18px 14px 8px; box-shadow:var(--shadow);
+  }
+  svg{display:block; width:100%; height:auto; max-width:100%;}
+  figcaption{
+    font-size:13px; color:var(--ink-soft); text-align:center; margin-top:12px; line-height:1.5;
+  }
+
+  .legend{
+    display:flex; flex-wrap:wrap; gap:14px 26px; justify-content:center;
+    margin:22px 0 44px; font-family:"IBM Plex Mono",monospace; font-size:11.5px; color:var(--ink-soft);
+  }
+  .legend span{display:inline-flex; align-items:center; gap:7px;}
+  .legend i{width:22px; height:0; border-top:2px solid var(--ink-soft); display:inline-block;}
+  .legend i.dash{border-top:2px dashed var(--ink-soft);}
+  .legend i.acc{border-top:2px solid var(--accent);}
+
+  h2{
+    font-family:"Fraunces",Georgia,serif; font-weight:600; font-size:20px; margin:0 0 4px;
+  }
+  .section-sub{color:var(--ink-soft); font-size:14px; margin:0 0 18px;}
+
+  .grid{
+    display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:40px;
+  }
+  @media (max-width:760px){ .grid{grid-template-columns:1fr 1fr;} }
+  @media (max-width:520px){ .grid{grid-template-columns:1fr;} }
+  .node-card{
+    background:var(--surface); border:1px solid var(--line-soft); border-radius:12px;
+    padding:16px 18px; box-shadow:var(--shadow);
+  }
+  .node-card.change{border-color:var(--accent);}
+  .node-card .kind{
+    font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.07em;
+    text-transform:uppercase; color:var(--accent); margin:0 0 6px;
+    display:flex; align-items:center; justify-content:space-between; gap:8px;
+  }
+  .node-card .tag{
+    font-size:9.5px; padding:1px 7px; border-radius:999px; border:1px solid currentColor;
+  }
+  .node-card h3{font-size:15.5px; margin:0 0 6px; font-weight:600;}
+  .node-card p{font-size:13.5px; line-height:1.55; color:var(--ink-soft); margin:0;}
+
+  .callout{
+    border:1px solid var(--line-soft); border-left:3px solid var(--accent);
+    background:var(--surface); border-radius:0 10px 10px 0; padding:16px 18px;
+    box-shadow:var(--shadow); margin-bottom:16px;
+  }
+  .callout .kind{
+    font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.07em;
+    text-transform:uppercase; color:var(--accent); margin:0 0 6px;
+  }
+  .callout p{font-size:14px; line-height:1.6; color:var(--ink-soft); margin:0;}
+  .callout b{color:var(--ink); font-weight:600;}
+  .callout code{
+    font-family:"IBM Plex Mono",monospace; font-size:12.5px; background:var(--line-soft);
+    padding:1px 5px; border-radius:4px;
+  }
+</style>
+
+<div class="wrap">
+  <p class="eyebrow">System topology — planned update</p>
+  <h1>Where the code lives once GitHub Pages is retired</h1>
+  <p class="lede">This is the target setup: GitHub goes back to being just a code repository, and Cloudflare Pages takes over serving the app. Supabase and the AI proxy don't move at all.</p>
+  <span class="status-pill"><span class="dot"></span>Not live yet — today's app is still served by GitHub Pages directly</span>
+
+  <figure>
+    <div class="diagram-card">
+      <svg viewBox="0 0 1040 620" role="img" aria-label="Diagram: you push code to a private GitHub repository, which auto-deploys to Cloudflare Pages. The browser loads the app once from Cloudflare Pages, reads and writes all data directly and continuously with Supabase, and for the AI Assistant feature only, sends requests to a Cloudflare Worker in the same Cloudflare account, which attaches the Claude API key and forwards to the Claude API.">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+          </marker>
+        </defs>
+
+        <!-- Cloudflare account boundary -->
+        <rect x="510" y="270" width="510" height="140" rx="14" fill="none" stroke="var(--accent)" stroke-width="1.4" stroke-dasharray="3 5"/>
+        <text x="765" y="258" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" letter-spacing=".5" fill="var(--accent)">ONE CLOUDFLARE ACCOUNT</text>
+
+        <g fill="none" stroke="currentColor" color="var(--ink-soft)">
+          <!-- You -> GitHub -->
+          <path d="M95,85 L95,113" marker-end="url(#arrow)" stroke-width="1.6"/>
+          <!-- Browser -> Supabase -->
+          <path d="M630,93 L385,268" marker-end="url(#arrow)" stroke-width="1.6"/>
+          <!-- Browser -> Cloudflare Pages -->
+          <path d="M685,93 L685,268" marker-end="url(#arrow)" stroke-width="1.6"/>
+          <!-- Browser -> Cloudflare Worker -->
+          <path d="M745,93 L925,268" marker-end="url(#arrow)" stroke-width="1.6"/>
+          <!-- Cloudflare Worker -> Claude API -->
+          <path d="M925,358 L925,388" marker-end="url(#arrow)" stroke-width="1.6"/>
+        </g>
+        <!-- GitHub -> Cloudflare Pages (deploy pipeline, dashed) -->
+        <path d="M220,155 L560,270" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-dasharray="5 4" marker-end="url(#arrow)"/>
+
+        <!-- edge labels -->
+        <g font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-soft)">
+          <text x="95" y="102" text-anchor="middle">git push</text>
+          <text x="360" y="185" text-anchor="middle">reads &amp; writes —</text>
+          <text x="360" y="198" text-anchor="middle">live, every action</text>
+          <text x="700" y="185" text-anchor="middle">loads app files —</text>
+          <text x="700" y="198" text-anchor="middle">once per visit</text>
+          <text x="855" y="185" text-anchor="middle">AI Assistant</text>
+          <text x="855" y="198" text-anchor="middle">page only</text>
+          <text x="985" y="378" text-anchor="middle">attaches your</text>
+          <text x="985" y="391" text-anchor="middle">API key here</text>
+        </g>
+        <text x="395" y="222" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--accent)">auto-deploy on push</text>
+
+        <!-- You -->
+        <g>
+          <rect x="20" y="30" width="150" height="55" rx="10" fill="var(--surface)" stroke="var(--ink)" stroke-width="1.6"/>
+          <text x="95" y="53" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" letter-spacing="1" fill="var(--accent)">YOU</text>
+          <text x="95" y="72" text-anchor="middle" font-family="Inter, sans-serif" font-weight="600" font-size="14" fill="var(--ink)">Editing the code</text>
+        </g>
+
+        <!-- GitHub -->
+        <g>
+          <rect x="20" y="115" width="200" height="80" rx="10" fill="var(--surface)" stroke="var(--ink)" stroke-width="1.6"/>
+          <text x="120" y="140" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" letter-spacing="1" fill="var(--good)">PRIVATE REPO</text>
+          <text x="120" y="161" text-anchor="middle" font-family="Inter, sans-serif" font-weight="600" font-size="15" fill="var(--ink)">GitHub</text>
+          <text x="120" y="180" text-anchor="middle" font-family="Inter, sans-serif" font-size="11.5" fill="var(--ink-soft)">Code storage only — not public</text>
+        </g>
+
+        <!-- Browser -->
+        <g>
+          <rect x="580" y="30" width="210" height="63" rx="10" fill="var(--surface)" stroke="var(--ink)" stroke-width="1.6"/>
+          <text x="685" y="52" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" letter-spacing="1" fill="var(--accent)">CLIENT</text>
+          <text x="685" y="73" text-anchor="middle" font-family="Inter, sans-serif" font-weight="600" font-size="15" fill="var(--ink)">Your team's browser</text>
+        </g>
+
+        <!-- Supabase -->
+        <g>
+          <rect x="270" y="270" width="210" height="90" rx="10" fill="var(--surface)" stroke="var(--ink)" stroke-width="2"/>
+          <text x="375" y="298" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" letter-spacing="1" fill="var(--good)">DATABASE + API</text>
+          <text x="375" y="321" text-anchor="middle" font-family="Inter, sans-serif" font-weight="600" font-size="15" fill="var(--ink)">Supabase</text>
+          <text x="375" y="343" text-anchor="middle" font-family="Inter, sans-serif" font-size="12" fill="var(--ink-soft)">Unchanged — every record lives here</text>
+        </g>
+
+        <!-- Cloudflare Pages -->
+        <g>
+          <rect x="530" y="270" width="230" height="90" rx="10" fill="var(--surface)" stroke="var(--accent)" stroke-width="2"/>
+          <text x="645" y="298" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" letter-spacing="1" fill="var(--accent)">STATIC HOST · NEW</text>
+          <text x="645" y="321" text-anchor="middle" font-family="Inter, sans-serif" font-weight="600" font-size="15" fill="var(--ink)">Cloudflare Pages</text>
+          <text x="645" y="343" text-anchor="middle" font-family="Inter, sans-serif" font-size="12" fill="var(--ink-soft)">Replaces GitHub Pages</text>
+        </g>
+
+        <!-- Cloudflare Worker -->
+        <g>
+          <rect x="810" y="270" width="200" height="90" rx="10" fill="var(--surface)" stroke="var(--accent)" stroke-width="2"/>
+          <text x="910" y="298" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" letter-spacing="1" fill="var(--accent)">PROXY</text>
+          <text x="910" y="321" text-anchor="middle" font-family="Inter, sans-serif" font-weight="600" font-size="15" fill="var(--ink)">Worker</text>
+          <text x="910" y="343" text-anchor="middle" font-family="Inter, sans-serif" font-size="11.5" fill="var(--ink-soft)">Holds the Claude key</text>
+        </g>
+
+        <!-- Claude API -->
+        <g>
+          <rect x="810" y="388" width="200" height="80" rx="10" fill="var(--surface)" stroke="var(--ink)" stroke-width="1.6"/>
+          <text x="910" y="412" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" letter-spacing="1" fill="var(--accent)">MODEL</text>
+          <text x="910" y="433" text-anchor="middle" font-family="Inter, sans-serif" font-weight="600" font-size="14" fill="var(--ink)">Claude API</text>
+          <text x="910" y="452" text-anchor="middle" font-family="Inter, sans-serif" font-size="11" fill="var(--ink-soft)">Proposes changes</text>
+        </g>
+      </svg>
+    </div>
+    <figcaption>Dashed line = a code deploy, triggered when you push a change. Solid lines = live runtime traffic, happening every time someone uses the app. Cloudflare Pages and the Worker sit in the same Cloudflare account, so you manage both from one dashboard.</figcaption>
+  </figure>
+
+  <div class="legend">
+    <span><i></i> runtime request</span>
+    <span><i class="dash" style="border-color:var(--accent)"></i> code deploy</span>
+    <span><i class="acc"></i> new or changed in this plan</span>
+  </div>
+
+  <h2>What changes, what doesn't</h2>
+  <p class="section-sub">Two boxes get new jobs. Everything else is untouched.</p>
+  <div class="grid">
+    <div class="node-card change">
+      <p class="kind">Repo <span class="tag">changed role</span></p>
+      <h3>GitHub</h3>
+      <p>Goes private. Stops serving the site — it's purely where the code lives and where you make edits, same as always.</p>
+    </div>
+    <div class="node-card change">
+      <p class="kind">Static host <span class="tag">new</span></p>
+      <h3>Cloudflare Pages</h3>
+      <p>Takes over from GitHub Pages. Watches the private repo and redeploys automatically every time you save a change.</p>
+    </div>
+    <div class="node-card">
+      <p class="kind">Database + API</p>
+      <h3>Supabase</h3>
+      <p>No change. Still the only place your vendor, bill, payment and material data actually lives.</p>
+    </div>
+    <div class="node-card">
+      <p class="kind">Proxy</p>
+      <h3>Cloudflare Worker</h3>
+      <p>No change. Still the only place your Claude API key is stored — now simply a neighbor of Cloudflare Pages in the same account.</p>
+    </div>
+    <div class="node-card">
+      <p class="kind">Model</p>
+      <h3>Claude API</h3>
+      <p>No change. Still only ever reached through the Worker, never directly from the browser.</p>
+    </div>
+    <div class="node-card">
+      <p class="kind">You</p>
+      <h3>Editing workflow</h3>
+      <p>Stays familiar — you still edit in GitHub's editor and commit. The only difference is the site updates itself after, instead of being what you edited directly.</p>
+    </div>
+  </div>
+
+  <h2>What this actually fixes</h2>
+  <div class="callout">
+    <p class="kind">Why bother</p>
+    <p>Today, anyone can open your GitHub repo and read the app's source code, because GitHub Pages' free tier only serves from <b>public</b> repositories. Once the repo is private and Cloudflare Pages does the serving instead, the published app looks identical to visitors, but the underlying code is no longer browsable by anyone outside your organization.</p>
+  </div>
+  <div class="callout">
+    <p class="kind">What stays true either way</p>
+    <p>Your actual business data was never at risk from this — Supabase enforces <code>authenticated</code>-only access on every table regardless of who can see the app's code. This change is about hiding your source code and business logic, not about protecting data that was already protected.</p>
+  </div>
+</div>
