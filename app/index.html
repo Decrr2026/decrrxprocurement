@@ -1024,15 +1024,15 @@ function submitMaterialRequest(){
   var ui = state.ui.mr;
   var raw = (ui.rawInput||"").trim();
   if(!raw){ toast("Type what's needed first.","danger"); return; }
-  if(!ui.siteId){ toast("Select a site for this request.","danger"); return; }
   var parsed = parseMaterialRequestText(raw);
   var qty = num(ui.qty!==""?ui.qty:parsed.qty, 0);
   if(!(qty>0)){ toast("Enter a quantity greater than zero.","danger"); return; }
+  // Material and Site are optional: if nothing was matched or picked, the request is still logged
+  // with exactly what was typed so it isn't blocked — the approver can sort it out by hand.
   var material = ui.overrideMaterialId ? materialById(ui.overrideMaterialId) : ((parsed.material && parsed.score>=0.55) ? parsed.material : null);
-  if(!material){ toast("Couldn't confidently match a material from what you typed — pick one from the Material dropdown.","danger"); return; }
   var reqBy = (state.session && state.session.user && state.session.user.email) || "";
-  var data = { id: uid("mr"), materialId: material.id, materialName: material.name, rawInput: raw,
-    qty: qty, uom: material.uom||parsed.uomGuess||"", siteId: ui.siteId, notes: (ui.notes||"").trim(),
+  var data = { id: uid("mr"), materialId: material?material.id:"", materialName: material?material.name:(parsed.namePart||raw), rawInput: raw,
+    qty: qty, uom: material?(material.uom||""):(parsed.uomGuess||""), siteId: ui.siteId||"", notes: (ui.notes||"").trim(),
     status: "Pending Approval", decisionNote: "", requestedBy: reqBy, decidedBy: "", decidedAt: "" };
   persist("materialRequests", data.id, data).then(function(){
     toast("Material request submitted — waiting on approval.");
@@ -1733,7 +1733,7 @@ function pageMaterialRequests(){
     matchedMaterial = parsed.material;
     previewHtml = '<div class="mr-preview mr-preview-warn"><b>Not sure —</b> closest match is <b>'+esc(matchedMaterial.name)+'</b>. Confirm or pick a different one below.</div>';
   } else {
-    previewHtml = '<div class="mr-preview mr-preview-bad"><b>No confident match found.</b> Please choose the material manually below.</div>';
+    previewHtml = '<div class="mr-preview mr-preview-bad"><b>No confident match found.</b> Pick a material below if you know it, or leave it and it\'ll be logged exactly as typed.</div>';
   }
   var siteOpts = '<option value="">Select site</option>' + (state.settings.sites||[]).map(function(s){return '<option value="'+esc(s)+'" '+(ui.siteId===s?"selected":"")+'>'+esc(s)+'</option>';}).join("");
   var materialOpts = '<option value="">— choose material —</option>' + state.materials.map(function(m){return '<option value="'+m.id+'" '+((matchedMaterial&&matchedMaterial.id===m.id)?"selected":"")+'>'+esc(m.name)+' ('+esc(m.uom)+')</option>';}).join("");
@@ -1741,12 +1741,12 @@ function pageMaterialRequests(){
     '<div class="section-head"><div><h2>Raise a Material Request</h2><div class="hint">Type roughly what\'s needed — typos and shorthand are fine, it\'s matched against your Materials list automatically, no AI or internet needed. This goes to Pending Approval until the senior clears it.</div></div></div>' +
     '<div class="form-grid mr-2col">' +
       '<div class="field"><label for="mrRawInput">What do you need? <span class="req">*</span></label><input id="mrRawInput" placeholder="e.g. 5 bags semnet" value="'+esc(ui.rawInput)+'" autocomplete="off"></div>' +
-      '<div class="field"><label for="mrSite">Site <span class="req">*</span></label><select id="mrSite">'+siteOpts+'</select></div>' +
+      '<div class="field"><label for="mrSite">Site</label><select id="mrSite">'+siteOpts+'</select></div>' +
     '</div>' +
     '<div style="margin:2px 0 14px;">'+previewHtml+'</div>' +
     '<div class="form-grid mr-3col">' +
       '<div class="field"><label for="mrQty">Quantity <span class="req">*</span></label><input id="mrQty" type="number" min="0" step="0.01" placeholder="Qty" value="'+esc(qtyVal)+'"></div>' +
-      '<div class="field"><label for="mrMaterialOverride">Material'+((!matchedMaterial)?' <span class="req">*</span>':'')+'</label><select id="mrMaterialOverride">'+materialOpts+'</select></div>' +
+      '<div class="field"><label for="mrMaterialOverride">Material</label><select id="mrMaterialOverride">'+materialOpts+'</select></div>' +
       '<div class="field"><label for="mrNotes">Reason / notes</label><input id="mrNotes" placeholder="Why it\'s needed now" value="'+esc(ui.notes)+'"></div>' +
     '</div>' +
     '<div style="display:flex;gap:10px;margin-top:6px;">' +
